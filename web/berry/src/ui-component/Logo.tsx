@@ -1,4 +1,3 @@
-// @ts-nocheck
 // material-ui
 import logoLight from 'assets/images/logo.svg';
 import logoDark from 'assets/images/logo-white.svg';
@@ -16,7 +15,7 @@ import { useTheme } from '@mui/material/styles';
 // ==============================|| LOGO SVG ||============================== //
 
 const Logo = () => {
-  const siteInfo = useSelector((state) => state.siteInfo);
+  const siteInfo = useSelector((state: { siteInfo: { logo?: string; system_name?: string } }) => state.siteInfo);
   const theme = useTheme();
   const logo = theme.palette.mode === 'light' ? logoLight : logoDark;
 

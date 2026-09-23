@@ -1,25 +1,22 @@
-// @ts-nocheck
 import { Toast } from '@douyinfe/semi-ui';
 import { toastConstants } from '../constants';
 import React from 'react';
-import {toast} from "react-toastify";
+import {toast, type ToastOptions} from "react-toastify";
 
 const HTMLToastContent = ({ htmlContent }) => {
   return <div dangerouslySetInnerHTML={{ __html: htmlContent }} />;
 };
 export default HTMLToastContent;
 export function isAdmin() {
-  let user = localStorage.getItem('user');
+  const user = localStorage.getItem('user');
   if (!user) return false;
-  user = JSON.parse(user);
-  return user.role >= 10;
+  return (JSON.parse(user) as { role?: number }).role >= 10;
 }
 
 export function isRoot() {
-  let user = localStorage.getItem('user');
+  const user = localStorage.getItem('user');
   if (!user) return false;
-  user = JSON.parse(user);
-  return user.role >= 100;
+  return (JSON.parse(user) as { role?: number }).role >= 100;
 }
 
 export function getSystemName() {
@@ -53,11 +50,11 @@ export function isMobile() {
   return window.innerWidth <= 600;
 }
 
-let showErrorOptions = { autoClose: toastConstants.ERROR_TIMEOUT };
-let showWarningOptions = { autoClose: toastConstants.WARNING_TIMEOUT };
-let showSuccessOptions = { autoClose: toastConstants.SUCCESS_TIMEOUT };
-let showInfoOptions = { autoClose: toastConstants.INFO_TIMEOUT };
-let showNoticeOptions = { autoClose: false };
+let showErrorOptions: ToastOptions = { autoClose: toastConstants.ERROR_TIMEOUT };
+let showWarningOptions: ToastOptions = { autoClose: toastConstants.WARNING_TIMEOUT };
+let showSuccessOptions: ToastOptions = { autoClose: toastConstants.SUCCESS_TIMEOUT };
+let showInfoOptions: ToastOptions = { autoClose: toastConstants.INFO_TIMEOUT };
+let showNoticeOptions: ToastOptions = { autoClose: false };
 
 if (isMobile()) {
   showErrorOptions.position = 'top-center';

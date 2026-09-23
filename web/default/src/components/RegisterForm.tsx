@@ -1,4 +1,3 @@
-// @ts-nocheck
 import React, { useEffect, useState } from 'react';
 import {
   Button,
@@ -39,13 +38,17 @@ const RegisterForm = () => {
   }
 
   useEffect(() => {
-    let status = localStorage.getItem('status');
-    if (status) {
-      status = JSON.parse(status);
-      setShowEmailVerification(status.email_verification);
+    const storedStatus = localStorage.getItem('status');
+    if (storedStatus) {
+      const status = JSON.parse(storedStatus) as {
+        email_verification?: boolean;
+        turnstile_check?: boolean;
+        turnstile_site_key?: string;
+      };
+      setShowEmailVerification(Boolean(status.email_verification));
       if (status.turnstile_check) {
         setTurnstileEnabled(true);
-        setTurnstileSiteKey(status.turnstile_site_key);
+        setTurnstileSiteKey(status.turnstile_site_key ?? '');
       }
     }
   });
@@ -89,10 +92,9 @@ const RegisterForm = () => {
       if (!affCode) {
         affCode = localStorage.getItem('aff');
       }
-      inputs.aff_code = affCode;
       const res = await API.post(
         `/api/user/register?turnstile=${turnstileToken}`,
-        inputs
+        { ...inputs, aff_code: affCode ?? '' }
       );
       const { success, message } = res.data;
       if (success) {

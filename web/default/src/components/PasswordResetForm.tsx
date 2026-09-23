@@ -1,4 +1,3 @@
-// @ts-nocheck
 import React, { useEffect, useState } from 'react';
 import {
   Button,
@@ -28,12 +27,15 @@ const PasswordResetForm = () => {
   const logo = getLogo();
 
   useEffect(() => {
-    let status = localStorage.getItem('status');
-    if (status) {
-      status = JSON.parse(status);
+    const storedStatus = localStorage.getItem('status');
+    if (storedStatus) {
+      const status = JSON.parse(storedStatus) as {
+        turnstile_check?: boolean;
+        turnstile_site_key?: string;
+      };
       if (status.turnstile_check) {
         setTurnstileEnabled(true);
-        setTurnstileSiteKey(status.turnstile_site_key);
+        setTurnstileSiteKey(status.turnstile_site_key ?? '');
       }
     }
   }, []);
