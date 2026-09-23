@@ -1,20 +1,7 @@
-// @ts-nocheck
 import { useState, useEffect } from 'react';
 import SubCard from 'ui-component/cards/SubCard';
-import {
-    Stack,
-    FormControl,
-    InputLabel,
-    OutlinedInput,
-    Button,
-    Alert,
-    TextField,
-    Dialog,
-    DialogTitle,
-    DialogActions,
-    DialogContent,
-    Divider, Link
-} from '@mui/material';
+import { FormControl, InputLabel, OutlinedInput, Button, Alert, TextField, Dialog, DialogTitle, DialogActions, DialogContent, Divider, Link } from '@mui/material';
+import Stack from 'ui-component/LegacyStack';
 import Grid from 'ui-component/LegacyGrid';
 import { showError, showSuccess } from 'utils/common'; //,
 import { API } from 'utils/api';
@@ -47,7 +34,7 @@ const OtherSetting = () => {
           newInputs[item.key] = item.value;
         }
       });
-      setInputs(newInputs);
+      setInputs((current) => ({ ...current, ...newInputs }));
     } else {
       showError(message);
     }
@@ -107,7 +94,7 @@ const OtherSetting = () => {
   };
 
   const openGitHubRelease = () => {
-    window.location = 'https://github.com/songquanpeng/one-api/releases/latest';
+    window.location.href = 'https://github.com/songquanpeng/one-api/releases/latest';
   };
 
   const checkUpdate = async () => {
@@ -118,7 +105,7 @@ const OtherSetting = () => {
     } else {
       setUpdateData({
         tag_name: tag_name,
-        content: marked.parse(body)
+        content: await marked.parse(body)
       });
       setShowUpdateModal(true);
     }

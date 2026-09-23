@@ -1,4 +1,3 @@
-// @ts-nocheck
 import React, { useContext, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { UserContext } from '../context/User';
@@ -192,7 +191,7 @@ const SiderBar = () => {
             }}
             items={headerButtons}
             onSelect={key => {
-              setSelectedKeys([key.itemKey]);
+              setSelectedKeys([String(key.itemKey)]);
             }}
             header={{
               logo: <img src={logo} alt="logo" style={{ marginRight: '0.75em' }} />,

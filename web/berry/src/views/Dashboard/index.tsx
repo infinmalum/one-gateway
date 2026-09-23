@@ -1,6 +1,6 @@
-// @ts-nocheck
 import { useEffect, useState } from 'react';
-import { Grid, Typography } from '@mui/material';
+import { Typography } from '@mui/material';
+import Grid from 'ui-component/LegacyGrid';
 import { gridSpacing } from 'store/constant';
 import StatisticalLineChartCard from './component/StatisticalLineChartCard';
 import StatisticalBarChart from './component/StatisticalBarChart';
@@ -11,11 +11,11 @@ import UserCard from 'ui-component/cards/UserCard';
 
 const Dashboard = () => {
   const [isLoading, setLoading] = useState(true);
-  const [statisticalData, setStatisticalData] = useState([]);
+  const [statisticalData, setStatisticalData] = useState<{ data: unknown[]; xaxis: unknown[] }>({ data: [], xaxis: [] });
   const [requestChart, setRequestChart] = useState(null);
   const [quotaChart, setQuotaChart] = useState(null);
   const [tokenChart, setTokenChart] = useState(null);
-  const [users, setUsers] = useState([]);
+  const [users, setUsers] = useState<{ quota: number; used_quota: number; request_count: number }>({ quota: 0, used_quota: 0, request_count: 0 });
 
   const userDashboard = async () => {
     const res = await API.get('/api/user/dashboard');
@@ -177,7 +177,7 @@ function getBarDataGroup(data) {
 }
 
 function getLineCardOption(lineDataGroup, field) {
-  let todayValue = 0;
+  let todayValue: string | number = 0;
   let chartData = null;
   const lastItem = lineDataGroup.length - 1;
   let lineData = lineDataGroup.map((item, index) => {

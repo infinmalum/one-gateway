@@ -1,4 +1,4 @@
-// @ts-nocheck
+import { LegacyInput } from '../../components/SemiFormCompat';
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { API, isMobile, showError, showSuccess } from '../../helpers';
@@ -16,6 +16,7 @@ const EditUser = (props) => {
     github_id: '',
     wechat_id: '',
     email: '',
+    telegram_id: '',
     quota: 0,
     group: 'default'
   });
@@ -92,7 +93,7 @@ const EditUser = (props) => {
     <>
       <SideSheet
         placement={'right'}
-        title={<Title level={3}>{'编辑用户'}</Title>}
+        title={<Title heading={3}>{'编辑用户'}</Title>}
         headerStyle={{ borderBottom: '1px solid var(--semi-color-border)' }}
         bodyStyle={{ borderBottom: '1px solid var(--semi-color-border)' }}
         visible={props.visible}
@@ -112,7 +113,7 @@ const EditUser = (props) => {
           <div style={{ marginTop: 20 }}>
             <Typography.Text>用户名</Typography.Text>
           </div>
-          <Input
+          <LegacyInput
             label="用户名"
             name="username"
             placeholder={'请输入新的用户名'}
@@ -123,7 +124,7 @@ const EditUser = (props) => {
           <div style={{ marginTop: 20 }}>
             <Typography.Text>密码</Typography.Text>
           </div>
-          <Input
+          <LegacyInput
             label="密码"
             name="password"
             type={'password'}
@@ -135,7 +136,7 @@ const EditUser = (props) => {
           <div style={{ marginTop: 20 }}>
             <Typography.Text>显示名称</Typography.Text>
           </div>
-          <Input
+          <LegacyInput
             label="显示名称"
             name="display_name"
             placeholder={'请输入新的显示名称'}
@@ -150,21 +151,14 @@ const EditUser = (props) => {
               </div>
               <Select
                 placeholder={'请选择分组'}
-                name="group"
-                fluid
-                search
-                selection
-                allowAdditions
-                additionLabel={'请在系统设置页面编辑分组倍率以添加新的分组：'}
                 onChange={value => handleInputChange('group', value)}
                 value={inputs.group}
-                autoComplete="new-password"
                 optionList={groupOptions}
               />
               <div style={{ marginTop: 20 }}>
                 <Typography.Text>{`剩余额度${renderQuotaWithPrompt(quota)}`}</Typography.Text>
               </div>
-              <Input
+              <LegacyInput
                 name="quota"
                 placeholder={'请输入新的剩余额度'}
                 onChange={value => handleInputChange('quota', value)}
@@ -178,7 +172,7 @@ const EditUser = (props) => {
           <div style={{ marginTop: 20 }}>
             <Typography.Text>已绑定的 GitHub 账户</Typography.Text>
           </div>
-          <Input
+          <LegacyInput
             name="github_id"
             value={github_id}
             autoComplete="new-password"
@@ -188,14 +182,14 @@ const EditUser = (props) => {
           <div style={{ marginTop: 20 }}>
             <Typography.Text>已绑定的微信账户</Typography.Text>
           </div>
-          <Input
+          <LegacyInput
             name="wechat_id"
             value={wechat_id}
             autoComplete="new-password"
             placeholder="此项只读，需要用户通过个人设置页面的相关绑定按钮进行绑定，不可直接修改"
             readonly
           />
-          <Input
+          <LegacyInput
             name="telegram_id"
             value={telegram_id}
             autoComplete="new-password"
@@ -205,7 +199,7 @@ const EditUser = (props) => {
           <div style={{ marginTop: 20 }}>
             <Typography.Text>已绑定的邮箱账户</Typography.Text>
           </div>
-          <Input
+          <LegacyInput
             name="email"
             value={email}
             autoComplete="new-password"

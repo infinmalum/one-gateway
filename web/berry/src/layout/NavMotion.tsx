@@ -1,6 +1,5 @@
-// @ts-nocheck
 import PropTypes from 'prop-types';
-import { motion } from 'framer-motion';
+import { motion, type Transition } from 'framer-motion';
 
 // ==============================|| ANIMATION FOR CONTENT ||============================== //
 
@@ -20,7 +19,7 @@ const NavMotion = ({ children }) => {
     }
   };
 
-  const motionTransition = {
+  const motionTransition: Transition = {
     type: 'tween',
     ease: 'anticipate',
     duration: 0.4

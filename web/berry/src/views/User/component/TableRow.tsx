@@ -1,22 +1,8 @@
-// @ts-nocheck
 import PropTypes from 'prop-types';
 import { useState } from 'react';
 
-import {
-  Popover,
-  TableRow,
-  MenuItem,
-  TableCell,
-  IconButton,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
-  Button,
-  Tooltip,
-  Stack
-} from '@mui/material';
+import { Popover, TableRow, MenuItem, TableCell, IconButton, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Button, Tooltip } from '@mui/material';
+import Stack from 'ui-component/LegacyStack';
 
 import Label from 'ui-component/Label';
 import TableSwitch from 'ui-component/Switch';
@@ -138,9 +124,9 @@ export default function UsersTableRow({ item, manageUser, handleOpenModal, setMo
         onClose={handleCloseMenu}
         anchorOrigin={{ vertical: 'top', horizontal: 'left' }}
         transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-        PaperProps={{
+        slotProps={{ paper: {
           sx: { width: 140 }
-        }}
+        }}}
       >
         {item.role !== 100 && (
           <MenuItem

@@ -1,5 +1,5 @@
-// @ts-nocheck
-import { useDispatch, useSelector } from 'react-redux';
+import { useDispatch } from 'react-redux';
+import { useAppSelector as useSelector } from 'store/hooks';
 import { SET_THEME } from 'store/actions';
 import { useTheme } from '@mui/material/styles';
 import { Avatar, Box, ButtonBase } from '@mui/material';

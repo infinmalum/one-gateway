@@ -1,4 +1,3 @@
-// @ts-nocheck
 import React, { useEffect, useState } from 'react';
 import {
   Button,
@@ -19,7 +18,7 @@ const TopUp = () => {
   const [topUpLink, setTopUpLink] = useState('');
   const [userQuota, setUserQuota] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [user, setUser] = useState({});
+  const [user, setUser] = useState<{ username?: string; id?: number }>({});
 
   const topUp = async () => {
     if (redemptionCode === '') {
@@ -56,8 +55,8 @@ const TopUp = () => {
     let url = new URL(topUpLink);
     let username = user.username;
     let user_id = user.id;
-    url.searchParams.append('username', username);
-    url.searchParams.append('user_id', user_id);
+    url.searchParams.append('username', username ?? '');
+    url.searchParams.append('user_id', String(user_id ?? ''));
     url.searchParams.append('transaction_id', crypto.randomUUID());
     window.open(url.toString(), '_blank');
   };
@@ -74,9 +73,9 @@ const TopUp = () => {
   };
 
   useEffect(() => {
-    let status = localStorage.getItem('status');
-    if (status) {
-      status = JSON.parse(status);
+    const storedStatus = localStorage.getItem('status');
+    if (storedStatus) {
+      const status = JSON.parse(storedStatus) as import('../../types/site').SiteStatus;
       if (status.top_up_link) {
         setTopUpLink(status.top_up_link);
       }

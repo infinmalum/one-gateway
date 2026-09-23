@@ -1,4 +1,4 @@
-// @ts-nocheck
+import { LegacyInput } from '../../components/SemiFormCompat';
 import React, { useState } from 'react';
 import { API, isMobile, showError, showSuccess } from '../../helpers';
 import Title from '@douyinfe/semi-ui/lib/es/typography/title';
@@ -42,7 +42,7 @@ const AddUser = (props) => {
     <>
       <SideSheet
         placement={'left'}
-        title={<Title level={3}>{'添加用户'}</Title>}
+        title={<Title heading={3}>{'添加用户'}</Title>}
         headerStyle={{ borderBottom: '1px solid var(--semi-color-border)' }}
         bodyStyle={{ borderBottom: '1px solid var(--semi-color-border)' }}
         visible={props.visible}
@@ -59,7 +59,7 @@ const AddUser = (props) => {
         width={isMobile() ? '100%' : 600}
       >
         <Spin spinning={loading}>
-          <Input
+          <LegacyInput
             style={{ marginTop: 20 }}
             label="用户名"
             name="username"
@@ -69,7 +69,7 @@ const AddUser = (props) => {
             value={username}
             autoComplete="off"
           />
-          <Input
+          <LegacyInput
             style={{ marginTop: 20 }}
             addonBefore={'显示名'}
             label="显示名称"
@@ -79,7 +79,7 @@ const AddUser = (props) => {
             onChange={value => handleInputChange('display_name', value)}
             value={display_name}
           />
-          <Input
+          <LegacyInput
             style={{ marginTop: 20 }}
             label="密 码"
             name="password"

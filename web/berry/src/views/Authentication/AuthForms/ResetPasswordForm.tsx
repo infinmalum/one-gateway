@@ -1,9 +1,9 @@
-// @ts-nocheck
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
 // material-ui
-import { Button, Stack, Typography, Alert } from '@mui/material';
+import { Button, Typography, Alert } from '@mui/material';
+import Stack from 'ui-component/LegacyStack';
 
 // assets
 import { showError, copy } from 'utils/common';

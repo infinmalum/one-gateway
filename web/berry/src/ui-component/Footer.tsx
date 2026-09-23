@@ -1,7 +1,7 @@
 // material-ui
 import { Link, Container, Box } from '@mui/material';
 import React from 'react';
-import { useSelector } from 'react-redux';
+import { useAppSelector as useSelector } from 'store/hooks';
 
 // ==============================|| FOOTER - AUTHENTICATION 2 & 3 ||============================== //
 

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -36,7 +35,7 @@ const OtherSetting = () => {
     const res = await API.get('/api/option/');
     const { success, message, data } = res.data;
     if (success) {
-      let newInputs = {};
+      const newInputs = { ...inputs };
       data.forEach((item) => {
         if (item.key in inputs) {
           newInputs[item.key] = item.value;
@@ -96,7 +95,7 @@ const OtherSetting = () => {
   };
 
   const openGitHubRelease = () => {
-    window.location = 'https://github.com/songquanpeng/one-api/releases/latest';
+    window.location.href = 'https://github.com/songquanpeng/one-api/releases/latest';
   };
 
   const checkUpdate = async () => {
@@ -109,7 +108,7 @@ const OtherSetting = () => {
     } else {
       setUpdateData({
         tag_name: tag_name,
-        content: marked.parse(body),
+        content: await marked.parse(body),
       });
       setShowUpdateModal(true);
     }

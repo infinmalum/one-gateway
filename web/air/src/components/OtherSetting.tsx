@@ -1,4 +1,4 @@
-// @ts-nocheck
+import { LegacyFormInput } from './SemiFormCompat';
 import React, { useEffect, useState } from 'react';
 import { Button, Divider, Form, Grid, Header, Message, Modal } from 'semantic-ui-react';
 import { API, showError, showSuccess } from '../helpers';
@@ -26,7 +26,7 @@ const OtherSetting = () => {
     const res = await API.get('/api/option/');
     const { success, message, data } = res.data;
     if (success) {
-      let newInputs = {};
+      const newInputs = { ...inputs };
       data.forEach((item) => {
         if (item.key in inputs) {
           newInputs[item.key] = item.value;
@@ -90,7 +90,7 @@ const OtherSetting = () => {
   };
 
   const openGitHubRelease = () => {
-    window.location =
+    window.location.href =
       'https://github.com/songquanpeng/one-api/releases/latest';
   };
 
@@ -104,7 +104,7 @@ const OtherSetting = () => {
     } else {
       setUpdateData({
         tag_name: tag_name,
-        content: marked.parse(body)
+        content: await marked.parse(body)
       });
       setShowUpdateModal(true);
     }
@@ -130,7 +130,7 @@ const OtherSetting = () => {
           <Divider />
           <Header as='h3'>个性化设置</Header>
           <Form.Group widths='equal'>
-            <Form.Input
+            <LegacyFormInput
               label='系统名称'
               placeholder='在此输入系统名称'
               value={inputs.SystemName}
@@ -140,7 +140,7 @@ const OtherSetting = () => {
           </Form.Group>
           <Form.Button onClick={submitSystemName}>设置系统名称</Form.Button>
           <Form.Group widths='equal'>
-            <Form.Input
+            <LegacyFormInput
               label={<label>主题名称（<Link
                 to='https://github.com/songquanpeng/one-api/blob/main/web/README.md'>当前可用主题</Link>）</label>}
               placeholder='请输入主题名称'
@@ -151,7 +151,7 @@ const OtherSetting = () => {
           </Form.Group>
           <Form.Button onClick={submitTheme}>设置主题（重启生效）</Form.Button>
           <Form.Group widths='equal'>
-            <Form.Input
+            <LegacyFormInput
               label='Logo 图片地址'
               placeholder='在此输入 Logo 图片地址'
               value={inputs.Logo}
@@ -186,7 +186,7 @@ const OtherSetting = () => {
           <Message>移除 One API
             的版权标识必须首先获得授权，项目维护需要花费大量精力，如果本项目对你有意义，请主动支持本项目。</Message>
           <Form.Group widths='equal'>
-            <Form.Input
+            <LegacyFormInput
               label='页脚'
               placeholder='在此输入新的页脚，留空则使用默认页脚，支持 HTML 代码'
               value={inputs.Footer}

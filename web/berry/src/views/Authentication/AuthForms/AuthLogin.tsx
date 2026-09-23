@@ -1,25 +1,12 @@
-// @ts-nocheck
 import { useState } from 'react';
-import { useSelector } from 'react-redux';
+import { useAppSelector as useSelector } from 'store/hooks';
 import { Link } from 'react-router-dom';
 
 // material-ui
 import { useTheme } from '@mui/material/styles';
-import {
-  Box,
-  Button,
-  Divider,
-  FormControl,
-  FormHelperText,
-  Grid,
-  IconButton,
-  InputAdornment,
-  InputLabel,
-  OutlinedInput,
-  Stack,
-  Typography,
-  useMediaQuery
-} from '@mui/material';
+import { Box, Button, Divider, FormControl, FormHelperText, IconButton, InputAdornment, InputLabel, OutlinedInput, Typography, useMediaQuery } from '@mui/material';
+import Stack from 'ui-component/LegacyStack';
+import Grid from 'ui-component/LegacyGrid';
 
 // third party
 import * as Yup from 'yup';
@@ -242,7 +229,7 @@ const LoginForm = ({ ...others }) => {
               />
               {touched.username && errors.username && (
                 <FormHelperText error id="standard-weight-helper-text-username-login">
-                  {errors.username}
+                  {typeof errors.username === 'string' ? errors.username : ''}
                 </FormHelperText>
               )}
             </FormControl>
@@ -273,7 +260,7 @@ const LoginForm = ({ ...others }) => {
               />
               {touched.password && errors.password && (
                 <FormHelperText error id="standard-weight-helper-text-password-login">
-                  {errors.password}
+                  {typeof errors.password === 'string' ? errors.password : ''}
                 </FormHelperText>
               )}
             </FormControl>
@@ -296,7 +283,7 @@ const LoginForm = ({ ...others }) => {
             </Stack>
             {errors.submit && (
               <Box sx={{ mt: 3 }}>
-                <FormHelperText error>{errors.submit}</FormHelperText>
+                <FormHelperText error>{typeof errors.submit === 'string' ? errors.submit : ''}</FormHelperText>
               </Box>
             )}
 

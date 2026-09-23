@@ -1,4 +1,4 @@
-// @ts-nocheck
+import { LegacyFormInput } from './SemiFormCompat';
 import React, { useEffect, useState } from 'react';
 import { Button, Form, Grid, Header, Image, Message, Segment } from 'semantic-ui-react';
 import { Link, useNavigate } from 'react-router-dom';
@@ -26,13 +26,13 @@ const RegisterForm = () => {
   }
 
   useEffect(() => {
-    let status = localStorage.getItem('status');
-    if (status) {
-      status = JSON.parse(status);
-      setShowEmailVerification(status.email_verification);
+    const storedStatus = localStorage.getItem('status');
+    if (storedStatus) {
+      const status = JSON.parse(storedStatus) as import('../types/site').SiteStatus;
+      setShowEmailVerification(Boolean(status.email_verification));
       if (status.turnstile_check) {
         setTurnstileEnabled(true);
-        setTurnstileSiteKey(status.turnstile_site_key);
+        setTurnstileSiteKey(status.turnstile_site_key ?? '');
       }
     }
   });
@@ -63,10 +63,9 @@ const RegisterForm = () => {
       if (!affCode) {
         affCode = localStorage.getItem('aff');
       }
-      inputs.aff_code = affCode;
       const res = await API.post(
         `/api/user/register?turnstile=${turnstileToken}`,
-        inputs
+        { ...inputs, aff_code: affCode ?? '' }
       );
       const { success, message } = res.data;
       if (success) {
@@ -101,12 +100,12 @@ const RegisterForm = () => {
   return (
     <Grid textAlign="center" style={{ marginTop: '48px' }}>
       <Grid.Column style={{ maxWidth: 450 }}>
-        <Header as="h2" color="" textAlign="center">
+        <Header as="h2" textAlign="center">
           <Image src={logo} /> 新用户注册
         </Header>
         <Form size="large">
           <Segment>
-            <Form.Input
+            <LegacyFormInput
               fluid
               icon="user"
               iconPosition="left"
@@ -114,7 +113,7 @@ const RegisterForm = () => {
               onChange={handleChange}
               name="username"
             />
-            <Form.Input
+            <LegacyFormInput
               fluid
               icon="lock"
               iconPosition="left"
@@ -123,7 +122,7 @@ const RegisterForm = () => {
               name="password"
               type="password"
             />
-            <Form.Input
+            <LegacyFormInput
               fluid
               icon="lock"
               iconPosition="left"
@@ -134,7 +133,7 @@ const RegisterForm = () => {
             />
             {showEmailVerification ? (
               <>
-                <Form.Input
+                <LegacyFormInput
                   fluid
                   icon="mail"
                   iconPosition="left"
@@ -148,7 +147,7 @@ const RegisterForm = () => {
                     </Button>
                   }
                 />
-                <Form.Input
+                <LegacyFormInput
                   fluid
                   icon="lock"
                   iconPosition="left"

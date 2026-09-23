@@ -1,4 +1,4 @@
-// @ts-nocheck
+import { LegacyFormInput, LegacyFormDatePicker } from './SemiFormCompat';
 import React, { useEffect, useState } from 'react';
 import { API, copy, isAdmin, showError, showSuccess, timestamp2string } from '../helpers';
 
@@ -9,7 +9,7 @@ import { ITEMS_PER_PAGE } from '../constants';
 const colors = ['amber', 'blue', 'cyan', 'green', 'grey', 'indigo',
   'light-blue', 'lime', 'orange', 'pink',
   'purple', 'red', 'teal', 'violet', 'yellow'
-];
+] as const;
 
 function renderType(type) {
   switch (type) {
@@ -400,19 +400,19 @@ const LogsTable = () => {
         }
         <Form layout="horizontal" style={{ marginTop: 10 }}>
           <>
-            <Form.Input field="channel_id" label="渠道 ID" style={{ width: 176 }} value={channel_id}
+            <LegacyFormInput field="channel_id" label="渠道 ID" style={{ width: 176 }} value={channel_id}
                         placeholder={'可选值'} name="channel_id"
                         onChange={value => handleInputChange(value, 'channel_id')} />
-            <Form.Input field="mj_id" label="任务 ID" style={{ width: 176 }} value={mj_id}
+            <LegacyFormInput field="mj_id" label="任务 ID" style={{ width: 176 }} value={mj_id}
                         placeholder="可选值"
                         name="mj_id"
                         onChange={value => handleInputChange(value, 'mj_id')} />
-            <Form.DatePicker field="start_timestamp" label="起始时间" style={{ width: 272 }}
+            <LegacyFormDatePicker field="start_timestamp" label="起始时间" style={{ width: 272 }}
                              initValue={start_timestamp}
                              value={start_timestamp} type="dateTime"
                              name="start_timestamp"
                              onChange={value => handleInputChange(value, 'start_timestamp')} />
-            <Form.DatePicker field="end_timestamp" fluid label="结束时间" style={{ width: 272 }}
+            <LegacyFormDatePicker field="end_timestamp" fluid label="结束时间" style={{ width: 272 }}
                              initValue={end_timestamp}
                              value={end_timestamp} type="dateTime"
                              name="end_timestamp"

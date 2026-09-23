@@ -1,24 +1,9 @@
-// @ts-nocheck
 import PropTypes from 'prop-types';
 import { useState } from 'react';
-import { useSelector } from 'react-redux';
+import { useAppSelector as useSelector } from 'store/hooks';
 
-import {
-  Popover,
-  TableRow,
-  MenuItem,
-  TableCell,
-  IconButton,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
-  Button,
-  Tooltip,
-  Stack,
-  ButtonGroup
-} from '@mui/material';
+import { Popover, TableRow, MenuItem, TableCell, IconButton, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Button, Tooltip, ButtonGroup } from '@mui/material';
+import Stack from 'ui-component/LegacyStack';
 
 import TableSwitch from 'ui-component/Switch';
 import { renderQuota, timestamp2string, copy } from 'utils/common';
@@ -241,9 +226,9 @@ export default function TokensTableRow({ item, manageToken, handleOpenModal, set
         onClose={handleCloseMenu}
         anchorOrigin={{ vertical: 'top', horizontal: 'left' }}
         transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-        PaperProps={{
+        slotProps={{ paper: {
           sx: { width: 140 }
-        }}
+        }}}
       >
         {menuItems}
       </Popover>

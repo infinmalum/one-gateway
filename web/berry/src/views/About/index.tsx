@@ -1,4 +1,3 @@
-// @ts-nocheck
 import React, { useEffect, useState } from 'react';
 import { API } from 'utils/api';
 import { showError } from 'utils/common';

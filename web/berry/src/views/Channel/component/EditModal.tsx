@@ -1,4 +1,3 @@
-// @ts-nocheck
 import PropTypes from 'prop-types';
 import { useState, useEffect } from 'react';
 import { CHANNEL_OPTIONS } from 'constants/ChannelConstants';
@@ -43,15 +42,15 @@ const validationSchema = Yup.object().shape({
   type: Yup.number().required('渠道 不能为空'),
   key: Yup.string().when(['is_edit', 'type'], {
     is: (is_edit, type) => !is_edit && type !== 33,
-    then: Yup.string().required('密钥 不能为空')
+    then: () => Yup.string().required('密钥 不能为空')
   }),
   other: Yup.string(),
   models: Yup.array().min(1, '模型 不能为空'),
   groups: Yup.array().min(1, '用户组 不能为空'),
   base_url: Yup.string().when('type', {
     is: (value) => [3, 8].includes(value),
-    then: Yup.string().required('渠道API地址 不能为空'), // base_url 是必需的
-    otherwise: Yup.string() // 在其他情况下，base_url 可以是任意字符串
+    then: () => Yup.string().required('渠道API地址 不能为空'), // base_url 是必需的
+    otherwise: () => Yup.string() // 在其他情况下，base_url 可以是任意字符串
   }),
   model_mapping: Yup.string().test('is-json', '必须是有效的JSON字符串', function (value) {
     try {
@@ -72,7 +71,7 @@ const validationSchema = Yup.object().shape({
 const EditModal = ({ open, channelId, onCancel, onOk }) => {
   const theme = useTheme();
   // const [loading, setLoading] = useState(false);
-  const [initialInput, setInitialInput] = useState(defaultConfig.input);
+  const [initialInput, setInitialInput] = useState<{ is_edit?: boolean } & typeof defaultConfig.input>(defaultConfig.input);
   const [inputLabel, setInputLabel] = useState(defaultConfig.inputLabel); //
   const [inputPrompt, setInputPrompt] = useState(defaultConfig.prompt);
   const [groupOptions, setGroupOptions] = useState([]);
@@ -298,11 +297,11 @@ const EditModal = ({ open, channelId, onCancel, onOk }) => {
                     handleTypeChange(setFieldValue, e.target.value, values);
                   }}
                   MenuProps={{
-                    PaperProps: {
+                    slotProps: { paper: {
                       style: {
                         maxHeight: 200
                       }
-                    }
+                    } }
                   }}
                 >
                   {Object.values(CHANNEL_OPTIONS)
@@ -319,7 +318,7 @@ const EditModal = ({ open, channelId, onCancel, onOk }) => {
                 </Select>
                 {touched.type && errors.type ? (
                   <FormHelperText error id="helper-tex-channel-type-label">
-                    {errors.type}
+                    {typeof errors.type === 'string' ? errors.type : ''}
                   </FormHelperText>
                 ) : (
                   <FormHelperText id="helper-tex-channel-type-label"> {inputPrompt.type} </FormHelperText>
@@ -341,7 +340,7 @@ const EditModal = ({ open, channelId, onCancel, onOk }) => {
                 />
                 {touched.name && errors.name ? (
                   <FormHelperText error id="helper-tex-channel-name-label">
-                    {errors.name}
+                    {typeof errors.name === 'string' ? errors.name : ''}
                   </FormHelperText>
                 ) : (
                   <FormHelperText id="helper-tex-channel-name-label"> {inputPrompt.name} </FormHelperText>
@@ -363,7 +362,7 @@ const EditModal = ({ open, channelId, onCancel, onOk }) => {
                 />
                 {touched.base_url && errors.base_url ? (
                   <FormHelperText error id="helper-tex-channel-base_url-label">
-                    {errors.base_url}
+                    {typeof errors.base_url === 'string' ? errors.base_url : ''}
                   </FormHelperText>
                 ) : (
                   <FormHelperText id="helper-tex-channel-base_url-label"> {inputPrompt.base_url} </FormHelperText>
@@ -386,7 +385,7 @@ const EditModal = ({ open, channelId, onCancel, onOk }) => {
                   />
                   {touched.other && errors.other ? (
                     <FormHelperText error id="helper-tex-channel-other-label">
-                      {errors.other}
+                      {typeof errors.other === 'string' ? errors.other : ''}
                     </FormHelperText>
                   ) : (
                     <FormHelperText id="helper-tex-channel-other-label"> {inputPrompt.other} </FormHelperText>
@@ -416,7 +415,7 @@ const EditModal = ({ open, channelId, onCancel, onOk }) => {
                 />
                 {errors.groups ? (
                   <FormHelperText error id="helper-tex-channel-groups-label">
-                    {errors.groups}
+                    {typeof errors.groups === 'string' ? errors.groups : ''}
                   </FormHelperText>
                 ) : (
                   <FormHelperText id="helper-tex-channel-groups-label"> {inputPrompt.groups} </FormHelperText>
@@ -474,7 +473,7 @@ const EditModal = ({ open, channelId, onCancel, onOk }) => {
                 />
                 {errors.models ? (
                   <FormHelperText error id="helper-tex-channel-models-label">
-                    {errors.models}
+                    {typeof errors.models === 'string' ? errors.models : ''}
                   </FormHelperText>
                 ) : (
                   <FormHelperText id="helper-tex-channel-models-label"> {inputPrompt.models} </FormHelperText>
@@ -537,7 +536,7 @@ const EditModal = ({ open, channelId, onCancel, onOk }) => {
 
                     {touched.key && errors.key ? (
                       <FormHelperText error id="helper-tex-channel-key-label">
-                        {errors.key}
+                        {typeof errors.key === 'string' ? errors.key : ''}
                       </FormHelperText>
                     ) : (
                       <FormHelperText id="helper-tex-channel-key-label"> {inputPrompt.key} </FormHelperText>
@@ -590,7 +589,7 @@ const EditModal = ({ open, channelId, onCancel, onOk }) => {
                 />
                 {touched.model_mapping && errors.model_mapping ? (
                   <FormHelperText error id="helper-tex-channel-model_mapping-label">
-                    {errors.model_mapping}
+                    {typeof errors.model_mapping === 'string' ? errors.model_mapping : ''}
                   </FormHelperText>
                 ) : (
                   <FormHelperText id="helper-tex-channel-model_mapping-label"> {inputPrompt.model_mapping} </FormHelperText>
@@ -612,7 +611,7 @@ const EditModal = ({ open, channelId, onCancel, onOk }) => {
                 />
                 {touched.system_prompt && errors.system_prompt ? (
                   <FormHelperText error id="helper-tex-channel-system_prompt-label">
-                    {errors.system_prompt}
+                    {typeof errors.system_prompt === 'string' ? errors.system_prompt : ''}
                   </FormHelperText>
                 ) : (
                   <FormHelperText id="helper-tex-channel-system_prompt-label"> {inputPrompt.system_prompt} </FormHelperText>

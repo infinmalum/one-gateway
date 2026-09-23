@@ -1,25 +1,12 @@
-// @ts-nocheck
 // material-ui
 import { useState } from 'react';
 import { useTheme } from '@mui/material/styles';
-import {
-  Box,
-  Button,
-  Stack,
-  Popper,
-  IconButton,
-  List,
-  ListItemButton,
-  Paper,
-  ListItemText,
-  Typography,
-  Divider,
-  ClickAwayListener
-} from '@mui/material';
+import { Box, Button, Popper, IconButton, List, ListItemButton, Paper, ListItemText, Typography, Divider, ClickAwayListener } from '@mui/material';
+import Stack from 'ui-component/LegacyStack';
 import LogoSection from 'layout/MainLayout/LogoSection';
 import { Link } from 'react-router-dom';
 import { useLocation } from 'react-router-dom';
-import { useSelector } from 'react-redux';
+import { useAppSelector as useSelector } from 'store/hooks';
 import ThemeButton from 'ui-component/ThemeButton';
 import ProfileSection from 'layout/MainLayout/Header/ProfileSection';
 import { IconMenu2 } from '@tabler/icons-react';
@@ -131,22 +118,22 @@ const Header = () => {
                     }}
                     onClick={handleCloseMenu}
                   >
-                    <ListItemButton component={Link} variant="text" to="/">
+                    <Link to="/" style={{ textDecoration: 'none', color: 'inherit' }}><ListItemButton>
                       <ListItemText primary={<Typography variant="body2">首页</Typography>} />
-                    </ListItemButton>
+                    </ListItemButton></Link>
 
-                    <ListItemButton component={Link} variant="text" to="/about">
+                    <Link to="/about" style={{ textDecoration: 'none', color: 'inherit' }}><ListItemButton>
                       <ListItemText primary={<Typography variant="body2">关于</Typography>} />
-                    </ListItemButton>
+                    </ListItemButton></Link>
                     <Divider />
                     {account.user ? (
-                      <ListItemButton component={Link} variant="contained" to="/panel" color="primary">
+                      <Link to="/panel" style={{ textDecoration: 'none', color: 'inherit' }}><ListItemButton>
                         控制台
-                      </ListItemButton>
+                      </ListItemButton></Link>
                     ) : (
-                      <ListItemButton component={Link} variant="contained" to="/login" color="primary">
+                      <Link to="/login" style={{ textDecoration: 'none', color: 'inherit' }}><ListItemButton>
                         登录
-                      </ListItemButton>
+                      </ListItemButton></Link>
                     )}
                   </List>
                 </MainCard>

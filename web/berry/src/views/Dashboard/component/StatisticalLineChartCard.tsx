@@ -1,9 +1,9 @@
-// @ts-nocheck
 import PropTypes from 'prop-types';
 
 // material-ui
 import { useTheme, styled } from '@mui/material/styles';
-import { Box, Grid, Typography } from '@mui/material';
+import { Box, Typography } from '@mui/material';
+import Grid from 'ui-component/LegacyGrid';
 
 // third-party
 import Chart from 'react-apexcharts';

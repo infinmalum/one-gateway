@@ -1,6 +1,6 @@
-// @ts-nocheck
 // material-ui
-import { Card, CardContent, Grid } from '@mui/material';
+import { Card, CardContent } from '@mui/material';
+import Grid from 'ui-component/LegacyGrid';
 import Skeleton from '@mui/material/Skeleton';
 
 // project imports

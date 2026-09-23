@@ -1,4 +1,3 @@
-// @ts-nocheck
 import React, { useEffect, useState } from 'react';
 import {
   Button,
@@ -244,7 +243,9 @@ const LogsTable = () => {
     setLoading(false);
   };
 
-  const onPaginationChange = (e, { activePage }) => {
+  const onPaginationChange = (e, { activePage: rawPage }: { activePage?: number | string }) => {
+    const activePage = Number(rawPage);
+    if (!Number.isFinite(activePage)) return;
     (async () => {
       if (activePage === Math.ceil(logs.length / ITEMS_PER_PAGE) + 1) {
         // In this case we have to load more data and then append them.
@@ -586,7 +587,7 @@ const LogsTable = () => {
                 name='logType'
                 value={logType}
                 onChange={(e, { name, value }) => {
-                  setLogType(value);
+                  setLogType(Number(value));
                 }}
               />
               <Button size='small' onClick={refresh} loading={loading}>

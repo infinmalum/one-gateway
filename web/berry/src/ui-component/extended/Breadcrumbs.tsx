@@ -1,11 +1,11 @@
-// @ts-nocheck
-import PropTypes from 'prop-types';
 import { useEffect, useState } from 'react';
+import type { ElementType } from 'react';
 import { Link } from 'react-router-dom';
 
 // material-ui
 import { useTheme } from '@mui/material/styles';
-import { Box, Card, Divider, Grid, Typography } from '@mui/material';
+import { Box, Card, Divider, Typography } from '@mui/material';
+import Grid from 'ui-component/LegacyGrid';
 import MuiBreadcrumbs from '@mui/material/Breadcrumbs';
 
 // project imports
@@ -28,7 +28,15 @@ const linkSX = {
 
 // ==============================|| BREADCRUMBS ||============================== //
 
-const Breadcrumbs = ({ card, divider, icon, icons, maxItems, navigation, rightAlign, separator, title, titleBottom, ...others }) => {
+type RouteItem = { type?: string; icon?: ElementType; title?: string; breadcrumbs?: boolean; url?: string; children?: RouteItem[] };
+type BreadcrumbsProps = {
+  card?: boolean; divider?: boolean; icon?: boolean; icons?: boolean; maxItems?: number;
+  navigation?: { items?: RouteItem[] }; rightAlign?: boolean;
+  separator?: ElementType<{ stroke?: number; size?: string }>;
+  title?: boolean; titleBottom?: boolean;
+};
+
+const Breadcrumbs = ({ card, divider, icon, icons, maxItems, navigation, rightAlign, separator, title, titleBottom, ...others }: BreadcrumbsProps) => {
   const theme = useTheme();
 
   const iconStyle = {
@@ -39,8 +47,8 @@ const Breadcrumbs = ({ card, divider, icon, icons, maxItems, navigation, rightAl
     color: theme.palette.secondary.main
   };
 
-  const [main, setMain] = useState();
-  const [item, setItem] = useState();
+  const [main, setMain] = useState<RouteItem | null>(null);
+  const [item, setItem] = useState<RouteItem | null>(null);
 
   // set active item state
   const getCollapse = (menu) => {
@@ -170,19 +178,6 @@ const Breadcrumbs = ({ card, divider, icon, icons, maxItems, navigation, rightAl
   }
 
   return breadcrumbContent;
-};
-
-Breadcrumbs.propTypes = {
-  card: PropTypes.bool,
-  divider: PropTypes.bool,
-  icon: PropTypes.bool,
-  icons: PropTypes.bool,
-  maxItems: PropTypes.number,
-  navigation: PropTypes.object,
-  rightAlign: PropTypes.bool,
-  separator: PropTypes.oneOfType([PropTypes.func, PropTypes.object]),
-  title: PropTypes.bool,
-  titleBottom: PropTypes.bool
 };
 
 export default Breadcrumbs;

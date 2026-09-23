@@ -1,4 +1,4 @@
-// @ts-nocheck
+import { LegacyInput } from './SemiFormCompat';
 import React, { useContext, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { API, copy, isRoot, showError, showInfo, showSuccess } from '../helpers';
@@ -35,7 +35,7 @@ const PersonalSetting = () => {
     set_new_password: '',
     set_new_password_confirmation: ''
   });
-  const [status, setStatus] = useState({});
+  const [status, setStatus] = useState<import('../types/site').SiteStatus>({});
   const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
   const [showWeChatBindModal, setShowWeChatBindModal] = useState(false);
   const [showEmailBindModal, setShowEmailBindModal] = useState(false);
@@ -59,13 +59,13 @@ const PersonalSetting = () => {
     // }
     // console.log(localStorage.getItem('user'))
 
-    let status = localStorage.getItem('status');
-    if (status) {
-      status = JSON.parse(status);
+    const storedStatus = localStorage.getItem('status');
+    if (storedStatus) {
+      const status = JSON.parse(storedStatus) as import('../types/site').SiteStatus;
       setStatus(status);
       if (status.turnstile_check) {
         setTurnstileEnabled(true);
-        setTurnstileSiteKey(status.turnstile_site_key);
+        setTurnstileSiteKey(status.turnstile_site_key ?? '');
       }
     }
     getUserData().then(
@@ -306,13 +306,13 @@ const PersonalSetting = () => {
           >
             <div style={{ marginTop: 20 }}>
               <Typography.Text>{`可用额度${renderQuotaWithPrompt(userState?.user?.aff_quota)}`}</Typography.Text>
-              <Input style={{ marginTop: 5 }} value={userState?.user?.aff_quota} disabled={true}></Input>
+              <LegacyInput style={{ marginTop: 5 }} value={String(userState?.user?.aff_quota ?? '')} disabled={true}></LegacyInput>
             </div>
             <div style={{ marginTop: 20 }}>
               <Typography.Text>{`划转额度${renderQuotaWithPrompt(transferAmount)} 最低` + renderQuota(getQuotaPerUnit())}</Typography.Text>
               <div>
                 <InputNumber min={0} style={{ marginTop: 5 }} value={transferAmount}
-                  onChange={(value) => setTransferAmount(value)} disabled={false}></InputNumber>
+                  onChange={(value) => setTransferAmount(Number(value))} disabled={false}></InputNumber>
               </div>
             </div>
           </Modal>
@@ -320,8 +320,7 @@ const PersonalSetting = () => {
             <Card
               title={
                 <Card.Meta
-                  avatar={<Avatar size="default" color={stringToColor(getUsername())}
-                    style={{ marginRight: 4 }}>
+                  avatar={<Avatar size="default" style={{ marginRight: 4, backgroundColor: stringToColor(getUsername()) }}>
                     {typeof getUsername() === 'string' && getUsername().slice(0, 1)}
                   </Avatar>}
                   title={<Typography.Text>{getUsername()}</Typography.Text>}
@@ -362,7 +361,7 @@ const PersonalSetting = () => {
               footer={
                 <div>
                   <Typography.Text>邀请链接</Typography.Text>
-                  <Input
+                  <LegacyInput
                     style={{ marginTop: 10 }}
                     value={affLink}
                     onClick={handleAffLinkClick}
@@ -391,7 +390,7 @@ const PersonalSetting = () => {
             </Card> */}
             <Card>
               <Typography.Title heading={6}>邀请链接</Typography.Title>
-              <Input
+              <LegacyInput
                 style={{ marginTop: 10 }}
                 value={affLink}
                 onClick={handleAffLinkClick}
@@ -404,10 +403,10 @@ const PersonalSetting = () => {
                 <Typography.Text strong>邮箱</Typography.Text>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <div>
-                    <Input
+                    <LegacyInput
                       value={userState.user && userState.user.email !== '' ? userState.user.email : '未绑定'}
                       readonly={true}
-                    ></Input>
+                    ></LegacyInput>
                   </div>
                   <div>
                     <Button onClick={() => {
@@ -422,10 +421,10 @@ const PersonalSetting = () => {
                 <Typography.Text strong>微信</Typography.Text>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <div>
-                    <Input
+                    <LegacyInput
                       value={userState.user && userState.user.wechat_id !== '' ? '已绑定' : '未绑定'}
                       readonly={true}
-                    ></Input>
+                    ></LegacyInput>
                   </div>
                   <div>
                     <Button disabled={(userState.user && userState.user.wechat_id !== '') || !status.wechat_login}>
@@ -440,10 +439,10 @@ const PersonalSetting = () => {
                 <Typography.Text strong>GitHub</Typography.Text>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <div>
-                    <Input
+                    <LegacyInput
                       value={userState.user && userState.user.github_id !== '' ? userState.user.github_id : '未绑定'}
                       readonly={true}
-                    ></Input>
+                    ></LegacyInput>
                   </div>
                   <div>
                     <Button
@@ -464,10 +463,10 @@ const PersonalSetting = () => {
                 <Typography.Text strong>Telegram</Typography.Text>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <div>
-                    <Input
+                    <LegacyInput
                       value={userState.user && userState.user.telegram_id !== '' ? userState.user.telegram_id : '未绑定'}
                       readonly={true}
-                    ></Input>
+                    ></LegacyInput>
                   </div>
                   <div>
                     {status.telegram_oauth ?
@@ -492,7 +491,7 @@ const PersonalSetting = () => {
                 </Space>
 
                 {systemToken && (
-                  <Input
+                  <LegacyInput
                     readOnly
                     value={systemToken}
                     onClick={handleSystemTokenClick}
@@ -514,7 +513,7 @@ const PersonalSetting = () => {
                   onCancel={() => setShowWeChatBindModal(false)}
                   // onOpen={() => setShowWeChatBindModal(true)}
                   visible={showWeChatBindModal}
-                  size={'mini'}
+                  size={'small'}
                 >
                   <Image src={status.wechat_qrcode} />
                   <div style={{ textAlign: 'center' }}>
@@ -522,7 +521,7 @@ const PersonalSetting = () => {
                       微信扫码关注公众号，输入「验证码」获取验证码（三分钟内有效）
                     </p>
                   </div>
-                  <Input
+                  <LegacyInput
                     placeholder="验证码"
                     name="wechat_verification_code"
                     value={inputs.wechat_verification_code}
@@ -545,7 +544,7 @@ const PersonalSetting = () => {
             >
               <Typography.Title heading={6}>绑定邮箱地址</Typography.Title>
               <div style={{ marginTop: 20, display: 'flex', justifyContent: 'space-between' }}>
-                <Input
+                <LegacyInput
                   fluid
                   placeholder="输入邮箱地址"
                   onChange={(value) => handleInputChange('email', value)}
@@ -558,7 +557,7 @@ const PersonalSetting = () => {
                 </Button>
               </div>
               <div style={{ marginTop: 10 }}>
-                <Input
+                <LegacyInput
                   fluid
                   placeholder="验证码"
                   name="email_verification_code"
@@ -592,7 +591,7 @@ const PersonalSetting = () => {
                 />
               </div>
               <div style={{ marginTop: 20 }}>
-                <Input
+                <LegacyInput
                   placeholder={`输入你的账户名 ${userState?.user?.username} 以确认删除`}
                   name="self_account_deletion_confirmation"
                   value={inputs.self_account_deletion_confirmation}
@@ -618,13 +617,13 @@ const PersonalSetting = () => {
               onOk={changePassword}
             >
               <div style={{ marginTop: 20 }}>
-                <Input
+                <LegacyInput
                   name="set_new_password"
                   placeholder="新密码"
                   value={inputs.set_new_password}
                   onChange={(value) => handleInputChange('set_new_password', value)}
                 />
-                <Input
+                <LegacyInput
                   style={{ marginTop: 20 }}
                   name="set_new_password_confirmation"
                   placeholder="确认新密码"

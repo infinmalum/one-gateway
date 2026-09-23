@@ -1,6 +1,6 @@
-// @ts-nocheck
 import { Link } from 'react-router-dom';
-import { useDispatch, useSelector } from 'react-redux';
+import { useDispatch } from 'react-redux';
+import { useAppSelector as useSelector } from 'store/hooks';
 
 // material-ui
 import { ButtonBase } from '@mui/material';

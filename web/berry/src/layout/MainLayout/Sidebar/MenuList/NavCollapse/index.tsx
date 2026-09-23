@@ -1,7 +1,6 @@
-// @ts-nocheck
 import PropTypes from 'prop-types';
 import { useEffect, useState } from 'react';
-import { useSelector } from 'react-redux';
+import { useAppSelector as useSelector } from 'store/hooks';
 import { useLocation, useNavigate } from 'react-router';
 
 // material-ui
@@ -114,7 +113,7 @@ const NavCollapse = ({ menu, level }) => {
           }
           secondary={
             menu.caption && (
-              <Typography variant="caption" sx={{ ...theme.typography.subMenuCaption }} display="block" gutterBottom>
+              <Typography variant="caption" sx={{ ...theme.typography.subMenuCaption }}  gutterBottom>
                 {menu.caption}
               </Typography>
             )

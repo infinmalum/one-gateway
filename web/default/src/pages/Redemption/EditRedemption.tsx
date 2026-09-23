@@ -1,4 +1,3 @@
-// @ts-nocheck
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, Form, Card } from 'semantic-ui-react';
@@ -47,9 +46,11 @@ const EditRedemption = () => {
 
   const submit = async () => {
     if (!isEdit && inputs.name === '') return;
-    let localInputs = inputs;
-    localInputs.count = parseInt(localInputs.count);
-    localInputs.quota = parseInt(localInputs.quota);
+    const localInputs = {
+      ...inputs,
+      count: Number(inputs.count),
+      quota: Number(inputs.quota),
+    };
     let res;
     if (isEdit) {
       res = await API.put(`/api/redemption/`, {

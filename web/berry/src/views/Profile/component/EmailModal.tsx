@@ -1,20 +1,8 @@
-// @ts-nocheck
 import { useState, useEffect } from "react";
 import PropTypes from "prop-types";
 import React from "react";
-import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  OutlinedInput,
-  Button,
-  InputLabel,
-  Grid,
-  InputAdornment,
-  FormControl,
-  FormHelperText,
-} from "@mui/material";
+import { Dialog, DialogTitle, DialogContent, DialogActions, OutlinedInput, Button, InputLabel, InputAdornment, FormControl, FormHelperText } from "@mui/material";
+import Grid from 'ui-component/LegacyGrid';
 import { Formik } from "formik";
 import { showError, showSuccess } from "utils/common";
 import { useTheme } from "@mui/material/styles";
@@ -142,7 +130,7 @@ const EmailModal = ({ open, handleClose, turnstileToken }) => {
                   />
                   {touched.email && errors.email && (
                     <FormHelperText error id="helper-email">
-                      {errors.email}
+                      {typeof errors.email === 'string' ? errors.email : ''}
                     </FormHelperText>
                   )}
                 </FormControl>
@@ -169,7 +157,7 @@ const EmailModal = ({ open, handleClose, turnstileToken }) => {
                   {touched.email_verification_code &&
                     errors.email_verification_code && (
                       <FormHelperText error id="helper-email_verification_code">
-                        {errors.email_verification_code}
+                        {typeof errors.email_verification_code === 'string' ? errors.email_verification_code : ''}
                       </FormHelperText>
                     )}
                 </FormControl>

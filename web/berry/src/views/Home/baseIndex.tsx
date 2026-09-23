@@ -1,5 +1,5 @@
-// @ts-nocheck
-import { Box, Typography, Button, Container, Stack } from '@mui/material';
+import { Box, Typography, Button, Container } from '@mui/material';
+import Stack from 'ui-component/LegacyStack';
 import Grid from 'ui-component/LegacyGrid';
 import { GitHub } from '@mui/icons-material';
 

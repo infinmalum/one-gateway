@@ -1,8 +1,8 @@
-// @ts-nocheck
 import PropTypes from 'prop-types';
 
 // material-ui
-import { Grid, Typography } from '@mui/material';
+import { Typography } from '@mui/material';
+import Grid from 'ui-component/LegacyGrid';
 
 // third-party
 import Chart from 'react-apexcharts';
@@ -64,9 +64,9 @@ StatisticalBarChart.propTypes = {
 
 export default StatisticalBarChart;
 
-const chartData = {
+const chartData: React.ComponentProps<typeof Chart> = {
   height: 480,
-  type: 'bar',
+  type: 'bar' as const,
   options: {
     colors: [
       '#008FFB',
@@ -133,9 +133,7 @@ const chartData = {
         useSeriesColors: false
       },
       markers: {
-        width: 16,
-        height: 16,
-        radius: 5
+        size: 16
       },
       itemMargin: {
         horizontal: 15,

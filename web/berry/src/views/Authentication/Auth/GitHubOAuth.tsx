@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import React, { useEffect, useState } from 'react';
 import { showError } from 'utils/common';
@@ -6,7 +5,9 @@ import useLogin from 'hooks/useLogin';
 
 // material-ui
 import { useTheme } from '@mui/material/styles';
-import { Grid, Stack, Typography, useMediaQuery, CircularProgress } from '@mui/material';
+import { Typography, useMediaQuery, CircularProgress } from '@mui/material';
+import Stack from 'ui-component/LegacyStack';
+import Grid from 'ui-component/LegacyGrid';
 
 // project imports
 import AuthWrapper from '../AuthWrapper';
@@ -78,7 +79,7 @@ const GitHubOAuth = () => {
                   </Grid>
                   <Grid item xs={12} container direction="column" justifyContent="center" alignItems="center" style={{ height: '200px' }}>
                     <CircularProgress />
-                    <Typography variant="h3" paddingTop={'20px'}>
+                    <Typography variant="h3" sx={{ pt: '20px' }}>
                       {prompt}
                     </Typography>
                   </Grid>

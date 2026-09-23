@@ -1,9 +1,10 @@
-// @ts-nocheck
 import { Link } from 'react-router-dom';
 
 // material-ui
 import { useTheme } from '@mui/material/styles';
-import { Divider, Grid, Stack, Typography, useMediaQuery } from '@mui/material';
+import { Divider, Typography, useMediaQuery } from '@mui/material';
+import Stack from 'ui-component/LegacyStack';
+import Grid from 'ui-component/LegacyGrid';
 
 // project imports
 import AuthWrapper from '../AuthWrapper';

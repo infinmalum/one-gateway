@@ -1,9 +1,9 @@
-// @ts-nocheck
 import PropTypes from 'prop-types';
 
 // material-ui
 import { useTheme } from '@mui/material/styles';
-import { Box, Chip, Drawer, Stack, useMediaQuery } from '@mui/material';
+import { Box, Chip, Drawer, useMediaQuery } from '@mui/material';
+import Stack from 'ui-component/LegacyStack';
 
 // third-party
 import PerfectScrollbar from 'react-perfect-scrollbar';
@@ -17,7 +17,7 @@ import { drawerWidth } from 'store/constant';
 
 // ==============================|| SIDEBAR DRAWER ||============================== //
 
-const Sidebar = ({ drawerOpen, drawerToggle, window }) => {
+const Sidebar = ({ drawerOpen, drawerToggle, window }: { drawerOpen: boolean; drawerToggle: () => void; window?: Window }) => {
   const theme = useTheme();
   const matchUpMd = useMediaQuery(theme.breakpoints.up('md'));
 
@@ -43,7 +43,6 @@ const Sidebar = ({ drawerOpen, drawerToggle, window }) => {
             <Chip
               label={import.meta.env.REACT_APP_VERSION || '未知版本号'}
               disabled
-              chipcolor="secondary"
               size="small"
               sx={{ cursor: 'pointer' }}
             />
@@ -58,7 +57,6 @@ const Sidebar = ({ drawerOpen, drawerToggle, window }) => {
             <Chip
               label={import.meta.env.REACT_APP_VERSION || '未知版本号'}
               disabled
-              chipcolor="secondary"
               size="small"
               sx={{ cursor: 'pointer' }}
             />

@@ -1,22 +1,9 @@
-// @ts-nocheck
 // import PropTypes from 'prop-types';
-import { useSelector } from 'react-redux';
+import { useAppSelector as useSelector } from 'store/hooks';
 
 // material-ui
 import { styled, useTheme } from '@mui/material/styles';
-import {
-  Avatar,
-  Card,
-  CardContent,
-  // Grid,
-  // LinearProgress,
-  List,
-  ListItem,
-  ListItemAvatar,
-  ListItemText,
-  Typography
-  // linearProgressClasses
-} from '@mui/material';
+import { Avatar, Card, CardContent, List, ListItem, ListItemAvatar, ListItemText, Typography } from '@mui/material';
 import User1 from 'assets/images/users/user-round.svg';
 import { useNavigate } from 'react-router-dom';
 

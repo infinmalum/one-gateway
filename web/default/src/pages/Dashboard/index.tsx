@@ -1,4 +1,3 @@
-// @ts-nocheck
 import React, {useEffect, useState} from 'react';
 import {useTranslation} from 'react-i18next';
 import {Card, Grid} from 'semantic-ui-react';
@@ -113,14 +112,14 @@ const Dashboard = () => {
 
   // 处理数据以供折线图使用，补充缺失的日期
   const processTimeSeriesData = () => {
-    const dailyData = {};
+    const dailyData: Record<string, { date: string; requests: number; quota: number; tokens: number }> = {};
 
     // 获取日期范围
     const dates = data.map((item) => item.Day);
     const maxDate = new Date(); // 总是使用今天作为最后一天
     let minDate =
       dates.length > 0
-        ? new Date(Math.min(...dates.map((d) => new Date(d))))
+        ? new Date(Math.min(...dates.map((d) => new Date(d).getTime())))
         : new Date();
 
     // 确保至少显示7天的数据
@@ -155,14 +154,14 @@ const Dashboard = () => {
 
   // 处理数据以供堆叠柱状图使用
   const processModelData = () => {
-    const timeData = {};
+    const timeData: Record<string, { date: string; [model: string]: string | number }> = {};
 
     // 获取日期范围
     const dates = data.map((item) => item.Day);
     const maxDate = new Date(); // 总是使用今天作为最后一天
     let minDate =
       dates.length > 0
-        ? new Date(Math.min(...dates.map((d) => new Date(d))))
+        ? new Date(Math.min(...dates.map((d) => new Date(d).getTime())))
         : new Date();
 
     // 确保至少显示7天的数据
@@ -226,7 +225,7 @@ const Dashboard = () => {
     tick: {
       fontSize: 12,
       fill: '#A3AED0',
-      textAnchor: 'middle', // 文本居中对齐
+      textAnchor: 'middle' as const, // 文本居中对齐
     },
     tickFormatter: formatDate,
     interval: 0,
@@ -249,9 +248,8 @@ const Dashboard = () => {
                 <ResponsiveContainer
                   width='100%'
                   height={120}
-                  margin={{ left: 10, right: 10 }} // 调整容器边距
                 >
-                  <LineChart data={timeSeriesData}>
+                  <LineChart data={timeSeriesData} margin={{ left: 10, right: 10 }}>
                     <CartesianGrid
                       strokeDasharray='3 3'
                       vertical={chartConfig.lineChart.grid.vertical}
@@ -305,9 +303,8 @@ const Dashboard = () => {
                 <ResponsiveContainer
                   width='100%'
                   height={120}
-                  margin={{ left: 10, right: 10 }} // 调整容器边距
                 >
-                  <LineChart data={timeSeriesData}>
+                  <LineChart data={timeSeriesData} margin={{ left: 10, right: 10 }}>
                     <CartesianGrid
                       strokeDasharray='3 3'
                       vertical={chartConfig.lineChart.grid.vertical}
@@ -359,9 +356,8 @@ const Dashboard = () => {
                 <ResponsiveContainer
                   width='100%'
                   height={120}
-                  margin={{ left: 10, right: 10 }} // 调整容器边距
                 >
-                  <LineChart data={timeSeriesData}>
+                  <LineChart data={timeSeriesData} margin={{ left: 10, right: 10 }}>
                     <CartesianGrid
                       strokeDasharray='3 3'
                       vertical={chartConfig.lineChart.grid.vertical}

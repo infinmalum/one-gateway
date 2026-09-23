@@ -1,3 +1,4 @@
+import { LegacyFormInput } from './SemiFormCompat';
 import React, { useEffect, useState } from 'react';
 import { Divider, Form, Grid, Header } from 'semantic-ui-react';
 import { API, showError, showSuccess, timestamp2string, verifyJSON } from '../helpers';
@@ -163,7 +164,7 @@ const OperationSetting = () => {
             通用设置
           </Header>
           <Form.Group widths={4}>
-            <Form.Input
+            <LegacyFormInput
               label='充值链接'
               name='TopUpLink'
               onChange={handleInputChange}
@@ -172,7 +173,7 @@ const OperationSetting = () => {
               type='link'
               placeholder='例如发卡网站的购买链接'
             />
-            <Form.Input
+            <LegacyFormInput
               label='聊天页面链接'
               name='ChatLink'
               onChange={handleInputChange}
@@ -181,7 +182,7 @@ const OperationSetting = () => {
               type='link'
               placeholder='例如 ChatGPT Next Web 的部署地址'
             />
-            <Form.Input
+            <LegacyFormInput
               label='单位美元额度'
               name='QuotaPerUnit'
               onChange={handleInputChange}
@@ -191,7 +192,7 @@ const OperationSetting = () => {
               step='0.01'
               placeholder='一单位货币能兑换的额度'
             />
-            <Form.Input
+            <LegacyFormInput
               label='失败重试次数'
               name='RetryTimes'
               type={'number'}
@@ -239,7 +240,7 @@ const OperationSetting = () => {
             />
           </Form.Group>
           <Form.Group widths={4}>
-            <Form.Input label='目标时间' value={historyTimestamp} type='datetime-local'
+            <LegacyFormInput label='目标时间' value={historyTimestamp} type='datetime-local'
                         name='history_timestamp'
                         onChange={(e, { name, value }) => {
                           setHistoryTimestamp(value);
@@ -253,7 +254,7 @@ const OperationSetting = () => {
             监控设置
           </Header>
           <Form.Group widths={3}>
-            <Form.Input
+            <LegacyFormInput
               label='最长响应时间'
               name='ChannelDisableThreshold'
               onChange={handleInputChange}
@@ -263,7 +264,7 @@ const OperationSetting = () => {
               min='0'
               placeholder='单位秒，当运行渠道全部测试时，超过此时间将自动禁用渠道'
             />
-            <Form.Input
+            <LegacyFormInput
               label='额度提醒阈值'
               name='QuotaRemindThreshold'
               onChange={handleInputChange}
@@ -296,7 +297,7 @@ const OperationSetting = () => {
             额度设置
           </Header>
           <Form.Group widths={4}>
-            <Form.Input
+            <LegacyFormInput
               label='新用户初始额度'
               name='QuotaForNewUser'
               onChange={handleInputChange}
@@ -306,7 +307,7 @@ const OperationSetting = () => {
               min='0'
               placeholder='例如：100'
             />
-            <Form.Input
+            <LegacyFormInput
               label='请求预扣费额度'
               name='PreConsumedQuota'
               onChange={handleInputChange}
@@ -316,7 +317,7 @@ const OperationSetting = () => {
               min='0'
               placeholder='请求结束后多退少补'
             />
-            <Form.Input
+            <LegacyFormInput
               label='邀请新用户奖励额度'
               name='QuotaForInviter'
               onChange={handleInputChange}
@@ -326,7 +327,7 @@ const OperationSetting = () => {
               min='0'
               placeholder='例如：2000'
             />
-            <Form.Input
+            <LegacyFormInput
               label='新用户使用邀请码奖励额度'
               name='QuotaForInvitee'
               onChange={handleInputChange}

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -42,9 +41,9 @@ const SystemSetting = () => {
     TurnstileSecretKey: '',
     RegisterEnabled: '',
     EmailDomainRestrictionEnabled: '',
-    EmailDomainWhitelist: '',
+    EmailDomainWhitelist: [] as string[],
   });
-  const [originInputs, setOriginInputs] = useState({});
+  const [originInputs, setOriginInputs] = useState<Record<string, string>>({});
   let [loading, setLoading] = useState(false);
   const [EmailDomainWhitelist, setEmailDomainWhitelist] = useState([]);
   const [restrictedDomainInput, setRestrictedDomainInput] = useState('');
@@ -55,18 +54,19 @@ const SystemSetting = () => {
     const res = await API.get('/api/option/');
     const { success, message, data } = res.data;
     if (success) {
-      let newInputs = {};
+      const newInputs: Record<string, string> = {};
       data.forEach((item) => {
         newInputs[item.key] = item.value;
       });
       setInputs({
+        ...inputs,
         ...newInputs,
-        EmailDomainWhitelist: newInputs.EmailDomainWhitelist.split(','),
+        EmailDomainWhitelist: (newInputs.EmailDomainWhitelist ?? '').split(','),
       });
       setOriginInputs(newInputs);
 
       setEmailDomainWhitelist(
-        newInputs.EmailDomainWhitelist.split(',').map((item) => {
+        (newInputs.EmailDomainWhitelist ?? '').split(',').map((item) => {
           return { key: item, text: item, value: item };
         })
       );
@@ -438,12 +438,13 @@ const SystemSetting = () => {
               ]);
             }}
             onChange={(e, { value }) => {
+              if (!Array.isArray(value)) return;
               let newEmailDomainWhitelist = [];
               value.forEach((item) => {
                 newEmailDomainWhitelist.push({
-                  key: item,
-                  text: item,
-                  value: item,
+                  key: String(item),
+                  text: String(item),
+                  value: String(item),
                 });
               });
               setEmailDomainWhitelist(newEmailDomainWhitelist);

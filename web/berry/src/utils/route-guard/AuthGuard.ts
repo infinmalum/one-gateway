@@ -1,5 +1,4 @@
-// @ts-nocheck
-import { useSelector } from 'react-redux';
+import { useAppSelector as useSelector } from 'store/hooks';
 import { useEffect, useContext } from 'react';
 import { UserContext } from 'contexts/UserContext';
 import { useNavigate } from 'react-router-dom';

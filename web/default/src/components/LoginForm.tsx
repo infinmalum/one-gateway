@@ -1,4 +1,3 @@
-// @ts-nocheck
 import React, { useContext, useEffect, useState } from 'react';
 import {
   Button,
@@ -31,17 +30,16 @@ const LoginForm = () => {
   const { username, password } = inputs;
   const [userState, userDispatch] = useContext(UserContext);
   let navigate = useNavigate();
-  const [status, setStatus] = useState({});
+  const [status, setStatus] = useState<import('../types/site').SiteStatus>({});
   const logo = getLogo();
 
   useEffect(() => {
     if (searchParams.get('expired')) {
       showError(t('messages.error.login_expired'));
     }
-    let status = localStorage.getItem('status');
-    if (status) {
-      status = JSON.parse(status);
-      setStatus(status);
+    const storedStatus = localStorage.getItem('status');
+    if (storedStatus) {
+      setStatus(JSON.parse(storedStatus) as import('../types/site').SiteStatus);
     }
   }, []);
 

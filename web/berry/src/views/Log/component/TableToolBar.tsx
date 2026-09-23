@@ -1,4 +1,4 @@
-// @ts-nocheck
+import Stack from 'ui-component/LegacyStack';
 import PropTypes from "prop-types";
 import { useTheme } from "@mui/material/styles";
 import {
@@ -10,7 +10,6 @@ import {
 import {
   InputAdornment,
   OutlinedInput,
-  Stack,
   FormControl,
   InputLabel,
   Select,
@@ -212,11 +211,11 @@ export default function TableToolBar({
               minWidth: "100%",
             }}
             MenuProps={{
-              PaperProps: {
+              slotProps: { paper: {
                 style: {
                   maxHeight: 200,
                 },
-              },
+              } },
             }}
           >
             {Object.values(LogType).map((option) => {

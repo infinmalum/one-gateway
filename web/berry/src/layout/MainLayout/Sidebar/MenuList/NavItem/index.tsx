@@ -1,8 +1,8 @@
-// @ts-nocheck
 import PropTypes from 'prop-types';
-import { forwardRef, useEffect } from 'react';
+import { useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { useDispatch, useSelector } from 'react-redux';
+import { useDispatch } from 'react-redux';
+import { useAppSelector as useSelector } from 'store/hooks';
 
 // material-ui
 import { useTheme } from '@mui/material/styles';
@@ -41,13 +41,6 @@ const NavItem = ({ item, level }) => {
     itemTarget = '_blank';
   }
 
-  let listItemProps = {
-    component: forwardRef((props, ref) => <Link ref={ref} {...props} to={item.url} target={itemTarget} />)
-  };
-  if (item?.external) {
-    listItemProps = { component: 'a', href: item.url, target: itemTarget };
-  }
-
   const itemHandler = (id) => {
     dispatch({ type: MENU_OPEN, id });
     if (matchesSM) dispatch({ type: SET_MENU, opened: false });
@@ -65,9 +58,8 @@ const NavItem = ({ item, level }) => {
     // eslint-disable-next-line
   }, [pathname]);
 
-  return (
+  const button = (
     <ListItemButton
-      {...listItemProps}
       disabled={item.disabled}
       sx={{
         borderRadius: `${customization.borderRadius}px`,
@@ -89,7 +81,7 @@ const NavItem = ({ item, level }) => {
         }
         secondary={
           item.caption && (
-            <Typography variant="caption" sx={{ ...theme.typography.subMenuCaption }} display="block" gutterBottom>
+            <Typography variant="caption" sx={{ ...theme.typography.subMenuCaption }}  gutterBottom>
               {item.caption}
             </Typography>
           )
@@ -105,6 +97,11 @@ const NavItem = ({ item, level }) => {
         />
       )}
     </ListItemButton>
+  );
+  return item.external ? (
+    <a href={item.url} target={itemTarget} style={{ textDecoration: 'none', color: 'inherit' }}>{button}</a>
+  ) : (
+    <Link to={item.url} target={itemTarget} style={{ textDecoration: 'none', color: 'inherit' }}>{button}</Link>
   );
 };
 

@@ -1,4 +1,5 @@
-// @ts-nocheck
+import { LegacyInput } from './SemiFormCompat';
+import { LegacyFormInput } from './SemiFormCompat';
 import React, { useEffect, useState } from 'react';
 import { API, isMobile, shouldShowPrompt, showError, showInfo, showSuccess, timestamp2string } from '../helpers';
 
@@ -323,8 +324,8 @@ const ChannelsTable = () => {
     fetchGroups().then();
   }, []);
 
-  const manageChannel = async (id, action, record, value) => {
-    let data = { id };
+  const manageChannel = async (id, action, record, value = '') => {
+    const data: { id: number; status?: number; priority?: number; weight?: number } = { id };
     let res;
     switch (action) {
       case 'delete':
@@ -398,8 +399,7 @@ const ChannelsTable = () => {
   };
 
   const renderResponseTime = (responseTime) => {
-    let time = responseTime / 1000;
-    time = time.toFixed(2) + ' 秒';
+    const time = (responseTime / 1000).toFixed(2) + ' 秒';
     if (responseTime === 0) {
       return <Tag size="large" color="grey">未测试</Tag>;
     } else if (responseTime <= 1000) {
@@ -432,7 +432,7 @@ const ChannelsTable = () => {
     setSearching(false);
   };
 
-  const testChannel = async (record, model) => {
+  const testChannel = async (record, model = '') => {
     const res = await API.get(`/api/channel/test/${record.id}?model=${model}`);
     const { success, message, time } = res.data;
     if (success) {
@@ -583,7 +583,7 @@ const ChannelsTable = () => {
         }} labelPosition="left">
           <div style={{ display: 'flex' }}>
             <Space>
-              <Form.Input
+              <LegacyFormInput
                 field="search_keyword"
                 label="搜索"
                 placeholder="ID，名称和密钥 ..."
@@ -593,7 +593,7 @@ const ChannelsTable = () => {
                   setSearchKeyword(v.trim());
                 }}
               />
-              {/* <Form.Input
+              {/* <LegacyFormInput
               field="search_model"
               label="模型"
               placeholder="模型关键字"

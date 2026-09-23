@@ -1,8 +1,8 @@
-// @ts-nocheck
 // WechatModal.js
 import PropTypes from 'prop-types';
 import React from 'react';
-import { Dialog, DialogTitle, DialogContent, TextField, Button, Typography, Grid } from '@mui/material';
+import { Dialog, DialogTitle, DialogContent, TextField, Button, Typography } from '@mui/material';
+import Grid from 'ui-component/LegacyGrid';
 import { Formik, Form, Field } from 'formik';
 import { showError } from 'utils/common';
 import * as Yup from 'yup';

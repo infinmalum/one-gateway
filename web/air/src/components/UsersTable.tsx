@@ -1,4 +1,4 @@
-// @ts-nocheck
+import { LegacyFormInput } from './SemiFormCompat';
 import React, { useEffect, useState } from 'react';
 import { API, showError, showSuccess } from '../helpers';
 import { Button, Form, Popconfirm, Space, Table, Tag, Tooltip, Dropdown } from '@douyinfe/semi-ui';
@@ -187,14 +187,14 @@ const UsersTable = () => {
     (async () => {
       if (activePage === Math.ceil(users.length / ITEMS_PER_PAGE) + 1) {
         // In this case we have to load more data and then append them.
-        await loadUsers(activePage - 1, orderBy);
+        await loadUsers(activePage - 1);
       }
       setActivePage(activePage);
     })();
   };
 
   useEffect(() => {
-    loadUsers(0, orderBy)
+    loadUsers(0)
       .then()
       .catch((reason) => {
         showError(reason);
@@ -330,7 +330,7 @@ const UsersTable = () => {
       <EditUser refresh={refresh} visible={showEditUser} handleClose={closeEditUser}
         editingUser={editingUser}></EditUser>
       <Form onSubmit={searchUsers}>
-        <Form.Input
+        <LegacyFormInput
           label="搜索关键字"
           icon="search"
           field="keyword"

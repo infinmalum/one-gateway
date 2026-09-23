@@ -1,4 +1,3 @@
-// @ts-nocheck
 /*
  * Label.js
  *
@@ -29,8 +28,8 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-import PropTypes from 'prop-types';
-import { forwardRef } from 'react';
+import { forwardRef, type ReactNode } from 'react';
+import type { SxProps, Theme } from '@mui/material/styles';
 
 import Box from '@mui/material/Box';
 import { useTheme } from '@mui/material/styles';
@@ -38,7 +37,19 @@ import { alpha, styled } from '@mui/material/styles';
 
 // ----------------------------------------------------------------------
 
-const Label = forwardRef(({ children, color = 'default', variant = 'soft', startIcon, endIcon, sx, ...other }, ref) => {
+export type LabelColor = 'default' | 'primary' | 'secondary' | 'info' | 'success' | 'warning' | 'orange' | 'error';
+type LabelVariant = 'filled' | 'outlined' | 'ghost' | 'soft';
+type LabelProps = {
+  children?: ReactNode;
+  color?: LabelColor;
+  variant?: LabelVariant;
+  startIcon?: ReactNode;
+  endIcon?: ReactNode;
+  sx?: SxProps<Theme>;
+  onClick?: () => void;
+};
+
+const Label = forwardRef<HTMLSpanElement, LabelProps>(({ children, color = 'default', variant = 'soft', startIcon, endIcon, sx, ...other }, ref) => {
   const theme = useTheme();
 
   const iconStyles = {
@@ -50,14 +61,12 @@ const Label = forwardRef(({ children, color = 'default', variant = 'soft', start
   return (
     <StyledLabel
       ref={ref}
-      component="span"
+      as="span"
       ownerState={{ color, variant }}
-      sx={{
+      sx={[{
         ...(startIcon && { pl: 0.75 }),
-        ...(endIcon && { pr: 0.75 }),
-        ...sx
-      }}
-      theme={theme}
+        ...(endIcon && { pr: 0.75 })
+      }, ...(Array.isArray(sx) ? sx : sx ? [sx] : [])]}
       {...other}
     >
       {startIcon && <Box sx={{ mr: 0.75, ...iconStyles }}> {startIcon} </Box>}
@@ -69,18 +78,9 @@ const Label = forwardRef(({ children, color = 'default', variant = 'soft', start
   );
 });
 
-Label.propTypes = {
-  children: PropTypes.node,
-  endIcon: PropTypes.object,
-  startIcon: PropTypes.object,
-  sx: PropTypes.object,
-  variant: PropTypes.oneOf(['filled', 'outlined', 'ghost', 'soft']),
-  color: PropTypes.oneOf(['default', 'primary', 'secondary', 'info', 'success', 'warning', 'orange', 'error'])
-};
-
 export default Label;
 
-const StyledLabel = styled(Box)(({ theme, ownerState }) => {
+const StyledLabel = styled(Box, { shouldForwardProp: (prop) => prop !== 'ownerState' })<{ ownerState: { color: LabelColor; variant: LabelVariant } }>(({ theme, ownerState }) => {
   // const lightMode = theme.palette.mode === 'light';
 
   const filledVariant = ownerState.variant === 'filled';

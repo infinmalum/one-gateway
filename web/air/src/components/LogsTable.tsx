@@ -1,4 +1,4 @@
-// @ts-nocheck
+import { LegacyFormInput, LegacyFormDatePicker } from './SemiFormCompat';
 import React, { useEffect, useState } from 'react';
 import { API, copy, isAdmin, showError, showSuccess, timestamp2string } from '../helpers';
 
@@ -17,7 +17,7 @@ function renderTimestamp(timestamp) {
 
 const MODE_OPTIONS = [{ key: 'all', text: '全部用户', value: 'all' }, { key: 'self', text: '当前用户', value: 'self' }];
 
-const colors = ['amber', 'blue', 'cyan', 'green', 'grey', 'indigo', 'light-blue', 'lime', 'orange', 'pink', 'purple', 'red', 'teal', 'violet', 'yellow'];
+const colors = ['amber', 'blue', 'cyan', 'green', 'grey', 'indigo', 'light-blue', 'lime', 'orange', 'pink', 'purple', 'red', 'teal', 'violet', 'yellow'] as const;
 
 function renderType(type) {
   switch (type) {
@@ -32,7 +32,7 @@ function renderType(type) {
     case 5:
       return <Tag color="violet" size="large"> 测试 </Tag>;
     default:
-      return <Tag color="black" size="large"> 未知 </Tag>;
+      return <Tag color="grey" size="large"> 未知 </Tag>;
   }
 }
 
@@ -73,7 +73,7 @@ const LogsTable = () => {
     className: isAdmin() ? 'tableShow' : 'tableHiddle',
     render: (text, record, index) => {
       return (isAdminUser ? <div>
-        <Avatar size="small" color={stringToColor(text)} style={{ marginRight: 4 }}
+        <Avatar size="small" style={{ marginRight: 4, backgroundColor: stringToColor(text) }}
           onClick={() => showUserInfo(record.user_id)}>
           {typeof text === 'string' && text.slice(0, 1)}
         </Avatar>
@@ -97,7 +97,7 @@ const LogsTable = () => {
   }, {
     title: '模型', dataIndex: 'model_name', render: (text, record, index) => {
       return (record.type === 0 || record.type === 2 ? <div>
-        <Tag color={stringToColor(text)} size="large" onClick={() => {
+        <Tag style={{ backgroundColor: stringToColor(text) }} size="large" onClick={() => {
           copyText(text);
         }}> {text} </Tag>
       </div> : <></>);
@@ -345,28 +345,28 @@ const LogsTable = () => {
       </Header>
       <Form layout="horizontal" style={{ marginTop: 10 }}>
         <>
-          <Form.Input field="token_name" label="令牌名称" style={{ width: 176 }} value={token_name}
+          <LegacyFormInput field="token_name" label="令牌名称" style={{ width: 176 }} value={token_name}
             placeholder={'可选值'} name="token_name"
             onChange={value => handleInputChange(value, 'token_name')} />
-          <Form.Input field="model_name" label="模型名称" style={{ width: 176 }} value={model_name}
+          <LegacyFormInput field="model_name" label="模型名称" style={{ width: 176 }} value={model_name}
             placeholder="可选值"
             name="model_name"
             onChange={value => handleInputChange(value, 'model_name')} />
-          <Form.DatePicker field="start_timestamp" label="起始时间" style={{ width: 272 }}
+          <LegacyFormDatePicker field="start_timestamp" label="起始时间" style={{ width: 272 }}
             initValue={start_timestamp}
             value={start_timestamp} type="dateTime"
             name="start_timestamp"
             onChange={value => handleInputChange(value, 'start_timestamp')} />
-          <Form.DatePicker field="end_timestamp" fluid label="结束时间" style={{ width: 272 }}
+          <LegacyFormDatePicker field="end_timestamp" fluid label="结束时间" style={{ width: 272 }}
             initValue={end_timestamp}
             value={end_timestamp} type="dateTime"
             name="end_timestamp"
             onChange={value => handleInputChange(value, 'end_timestamp')} />
           {isAdminUser && <>
-            <Form.Input field="channel" label="渠道 ID" style={{ width: 176 }} value={channel}
+            <LegacyFormInput field="channel" label="渠道 ID" style={{ width: 176 }} value={channel}
               placeholder="可选值" name="channel"
               onChange={value => handleInputChange(value, 'channel')} />
-            <Form.Input field="username" label="用户名称" style={{ width: 176 }} value={username}
+            <LegacyFormInput field="username" label="用户名称" style={{ width: 176 }} value={username}
               placeholder={'可选值'} name="username"
               onChange={value => handleInputChange(value, 'username')} />
           </>}
@@ -388,8 +388,9 @@ const LogsTable = () => {
         onPageChange: handlePageChange
       }} />
       <Select defaultValue="0" style={{ width: 120 }} onChange={(value) => {
-        setLogType(parseInt(value));
-        refresh(parseInt(value)).then();
+        const selectedType = Number(value);
+        setLogType(selectedType);
+        refresh(selectedType).then();
       }}>
         <Select.Option value="0">全部</Select.Option>
         <Select.Option value="1">充值</Select.Option>

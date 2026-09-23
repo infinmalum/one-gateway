@@ -1,4 +1,3 @@
-// @ts-nocheck
 import React, { useContext, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { UserContext } from '../context/User';
@@ -21,9 +20,10 @@ import {
   showSuccess,
 } from '../helpers';
 import '../index.css';
+import type { IconProps } from 'semantic-ui-react';
 
 // Header Buttons
-let headerButtons = [
+let headerButtons: { name: string; to: string; icon: IconProps['name']; admin?: boolean }[] = [
   {
     name: 'header.channel',
     to: '/channel',

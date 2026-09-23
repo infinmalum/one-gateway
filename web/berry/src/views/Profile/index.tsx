@@ -1,21 +1,7 @@
-// @ts-nocheck
 import { useState, useEffect } from 'react';
 import UserCard from 'ui-component/cards/UserCard';
-import {
-  Card,
-  Button,
-  InputLabel,
-  FormControl,
-  OutlinedInput,
-  Stack,
-  Alert,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Divider,
-  SvgIcon
-} from '@mui/material';
+import { Card, Button, InputLabel, FormControl, OutlinedInput, Alert, Dialog, DialogTitle, DialogContent, DialogActions, Divider, SvgIcon } from '@mui/material';
+import Stack from 'ui-component/LegacyStack';
 import Grid from 'ui-component/LegacyGrid';
 import SubCard from 'ui-component/cards/SubCard';
 import { IconBrandWechat, IconBrandGithub, IconMail } from '@tabler/icons-react';
@@ -25,11 +11,23 @@ import { onOidcClicked, showError, showSuccess } from 'utils/common';
 import { onGitHubOAuthClicked, onLarkOAuthClicked, copy } from 'utils/common';
 import * as Yup from 'yup';
 import WechatModal from 'views/Authentication/AuthForms/WechatModal';
-import { useSelector } from 'react-redux';
+import { useAppSelector as useSelector } from 'store/hooks';
 import EmailModal from './component/EmailModal';
 import Turnstile from 'react-turnstile';
 import Lark from 'assets/images/icons/lark.svg?react';
 import OIDC from 'assets/images/icons/oidc.svg?react';
+
+type ProfileData = {
+  username: string;
+  display_name: string;
+  password: string;
+  wechat_id: string;
+  github_id: string;
+  lark_id: string;
+  oidc_id: string;
+  email: string;
+  access_token: string;
+};
 
 const validationSchema = Yup.object().shape({
   username: Yup.string().required('用户名 不能为空').min(3, '用户名 不能小于 3 个字符'),
@@ -40,7 +38,7 @@ const validationSchema = Yup.object().shape({
 });
 
 export default function Profile() {
-  const [inputs, setInputs] = useState([]);
+  const [inputs, setInputs] = useState<ProfileData>({ username: '', display_name: '', password: '', wechat_id: '', github_id: '', lark_id: '', oidc_id: '', email: '', access_token: '' });
   const [showAccountDeleteModal, setShowAccountDeleteModal] = useState(false);
   const [turnstileEnabled, setTurnstileEnabled] = useState(false);
   const [turnstileSiteKey, setTurnstileSiteKey] = useState('');
@@ -150,10 +148,10 @@ export default function Profile() {
                 <IconMail /> {inputs.email || '未绑定'}
               </Label>
               <Label variant="ghost" color={inputs.lark_id ? 'primary' : 'default'}>
-                <SvgIcon component={Lark} inheritViewBox="0 0 24 24" /> {inputs.lark_id || '未绑定'}
+                <SvgIcon component={Lark} inheritViewBox /> {inputs.lark_id || '未绑定'}
               </Label>
               <Label variant="ghost" color={inputs.oidc_id ? 'primary' : 'default'}>
-                <SvgIcon component={OIDC} inheritViewBox="0 0 24 24" /> {getOidcId() || '未绑定'}
+                <SvgIcon component={OIDC} inheritViewBox /> {getOidcId() || '未绑定'}
               </Label>
             </Stack>
             <SubCard title="个人信息">

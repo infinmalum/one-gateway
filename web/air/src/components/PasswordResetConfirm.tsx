@@ -1,3 +1,4 @@
+import { LegacyFormInput } from './SemiFormCompat';
 import React, { useEffect, useState } from 'react';
 import { Button, Form, Grid, Header, Image, Segment } from 'semantic-ui-react';
 import { API, copy, showError, showNotice } from '../helpers';
@@ -68,7 +69,7 @@ const PasswordResetConfirm = () => {
         </Header>
         <Form size="large">
           <Segment>
-            <Form.Input
+            <LegacyFormInput
               fluid
               icon="mail"
               iconPosition="left"
@@ -78,7 +79,7 @@ const PasswordResetConfirm = () => {
               readOnly
             />
             {newPassword && (
-              <Form.Input
+              <LegacyFormInput
                 fluid
                 icon="lock"
                 iconPosition="left"
@@ -87,7 +88,7 @@ const PasswordResetConfirm = () => {
                 value={newPassword}
                 readOnly
                 onClick={(e) => {
-                  e.target.select();
+                  e.currentTarget.select();
                   navigator.clipboard.writeText(newPassword);
                   showNotice(`密码已复制到剪贴板：${newPassword}`);
                 }}

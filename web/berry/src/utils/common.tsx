@@ -1,4 +1,3 @@
-// @ts-nocheck
 import {enqueueSnackbar} from 'notistack';
 import {snackbarConstants} from 'constants/SnackbarConstants';
 import {API} from './api';
@@ -114,10 +113,10 @@ export async function onOidcClicked(auth_url, client_id, openInNewTab = false) {
 }
 
 export function isAdmin() {
-    let user = localStorage.getItem('user');
-    if (!user) return false;
-    user = JSON.parse(user);
-    return user.role >= 10;
+    const storedUser = localStorage.getItem('user');
+    if (!storedUser) return false;
+    const user = JSON.parse(storedUser) as { role?: number };
+    return (user.role ?? 0) >= 10;
 }
 
 export function timestamp2string(timestamp) {
@@ -147,15 +146,13 @@ export function timestamp2string(timestamp) {
 }
 
 export function calculateQuota(quota, digits = 2) {
-    let quotaPerUnit = localStorage.getItem('quota_per_unit');
-    quotaPerUnit = parseFloat(quotaPerUnit);
+    const quotaPerUnit = parseFloat(localStorage.getItem('quota_per_unit') ?? '0');
 
     return (quota / quotaPerUnit).toFixed(digits);
 }
 
 export function renderQuota(quota, digits = 2) {
-    let displayInCurrency = localStorage.getItem('display_in_currency');
-    displayInCurrency = displayInCurrency === 'true';
+    const displayInCurrency = localStorage.getItem('display_in_currency') === 'true';
     if (displayInCurrency) {
         return '$' + calculateQuota(quota, digits);
     }
@@ -183,9 +180,8 @@ export function renderNumber(num) {
     }
 }
 
-export function renderQuotaWithPrompt(quota, digits) {
-    let displayInCurrency = localStorage.getItem('display_in_currency');
-    displayInCurrency = displayInCurrency === 'true';
+export function renderQuotaWithPrompt(quota, digits = 2) {
+    const displayInCurrency = localStorage.getItem('display_in_currency') === 'true';
     if (displayInCurrency) {
         return `（等价金额：${renderQuota(quota, digits)}）`;
     }

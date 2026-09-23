@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { Outlet } from 'react-router-dom';
 import { useTheme } from '@mui/material/styles';
 import { AppBar, Box, CssBaseline, Toolbar, Container } from '@mui/material';
@@ -29,7 +28,7 @@ const MinimalLayout = () => {
           </Toolbar>
         </Container>
       </AppBar>
-      <Box sx={{ flex: '1 1 auto', overflow: 'auto' }} marginTop={'80px'}>
+      <Box sx={{ flex: '1 1 auto', overflow: 'auto', mt: '80px' }}>
         <Outlet />
       </Box>
       <Box sx={{ flex: 'none' }}>

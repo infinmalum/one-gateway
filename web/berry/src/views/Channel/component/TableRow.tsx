@@ -1,4 +1,3 @@
-// @ts-nocheck
 import PropTypes from "prop-types";
 import { useState } from "react";
 
@@ -189,7 +188,7 @@ export default function ChannelTableRow({
             label="优先级"
             variant="standard"
             defaultValue={item.priority}
-            inputProps={{ min: "0" }}
+            slotProps={{ htmlInput: { min: "0" } }}
             sx={{ width: 80 }}
           />
         </TableCell>
@@ -210,9 +209,9 @@ export default function ChannelTableRow({
         onClose={handleCloseMenu}
         anchorOrigin={{ vertical: "top", horizontal: "left" }}
         transformOrigin={{ vertical: "top", horizontal: "right" }}
-        PaperProps={{
+        slotProps={{ paper: {
           sx: { width: 140 },
-        }}
+        }}}
       >
         <MenuItem
           onClick={() => {

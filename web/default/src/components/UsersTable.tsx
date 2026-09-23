@@ -1,4 +1,3 @@
-// @ts-nocheck
 import React, { useEffect, useState } from 'react';
 import {
   Button,
@@ -62,18 +61,20 @@ const UsersTable = () => {
     setLoading(false);
   };
 
-  const onPaginationChange = (e, { activePage }) => {
+  const onPaginationChange = (e, { activePage: rawPage }: { activePage?: number | string }) => {
+    const activePage = Number(rawPage);
+    if (!Number.isFinite(activePage)) return;
     (async () => {
       if (activePage === Math.ceil(users.length / ITEMS_PER_PAGE) + 1) {
         // In this case we have to load more data and then append them.
-        await loadUsers(activePage - 1, orderBy);
+        await loadUsers(activePage - 1);
       }
       setActivePage(activePage);
     })();
   };
 
   useEffect(() => {
-    loadUsers(0, orderBy)
+    loadUsers(0)
       .then()
       .catch((reason) => {
         showError(reason);

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import PropTypes from 'prop-types';
 import * as Yup from 'yup';
 import { Formik } from 'formik';
@@ -27,8 +26,8 @@ const validationSchema = Yup.object().shape({
   quota: Yup.number().min(0, '必须大于等于0'),
   count: Yup.number().when('is_edit', {
     is: false,
-    then: Yup.number().min(1, '必须大于等于1'),
-    otherwise: Yup.number()
+    then: () => Yup.number().min(1, '必须大于等于1'),
+    otherwise: () => Yup.number()
   })
 });
 
@@ -119,7 +118,7 @@ const EditModal = ({ open, redemptiondId, onCancel, onOk }) => {
                 />
                 {touched.name && errors.name && (
                   <FormHelperText error id="helper-tex-channel-name-label">
-                    {errors.name}
+                    {typeof errors.name === 'string' ? errors.name : ''}
                   </FormHelperText>
                 )}
               </FormControl>
@@ -141,7 +140,7 @@ const EditModal = ({ open, redemptiondId, onCancel, onOk }) => {
 
                 {touched.quota && errors.quota && (
                   <FormHelperText error id="helper-tex-channel-quota-label">
-                    {errors.quota}
+                    {typeof errors.quota === 'string' ? errors.quota : ''}
                   </FormHelperText>
                 )}
               </FormControl>
@@ -162,7 +161,7 @@ const EditModal = ({ open, redemptiondId, onCancel, onOk }) => {
 
                   {touched.count && errors.count && (
                     <FormHelperText error id="helper-tex-channel-count-label">
-                      {errors.count}
+                      {typeof errors.count === 'string' ? errors.count : ''}
                     </FormHelperText>
                   )}
                 </FormControl>

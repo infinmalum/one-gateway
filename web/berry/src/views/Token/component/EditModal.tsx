@@ -1,4 +1,3 @@
-// @ts-nocheck
 import PropTypes from 'prop-types';
 import * as Yup from 'yup';
 import { Formik } from 'formik';
@@ -155,7 +154,7 @@ const EditModal = ({ open, tokenId, onCancel, onOk }) => {
                 />
                 {touched.name && errors.name && (
                   <FormHelperText error id="helper-tex-channel-name-label">
-                    {errors.name}
+                    {typeof errors.name === 'string' ? errors.name : ''}
                   </FormHelperText>
                 )}
               </FormControl>
@@ -197,7 +196,7 @@ const EditModal = ({ open, tokenId, onCancel, onOk }) => {
                 />
                 {errors.models ? (
                   <FormHelperText error id="helper-tex-channel-models-label">
-                    {errors.models}
+                    {typeof errors.models === 'string' ? errors.models : ''}
                   </FormHelperText>
                 ) : (
                   <FormHelperText id="helper-tex-channel-models-label">请选择允许使用的模型，留空则不进行限制</FormHelperText>
@@ -218,7 +217,7 @@ const EditModal = ({ open, tokenId, onCancel, onOk }) => {
                 />
                 {touched.subnet && errors.subnet ? (
                   <FormHelperText error id="helper-tex-channel-subnet-label">
-                    {errors.subnet}
+                    {typeof errors.subnet === 'string' ? errors.subnet : ''}
                   </FormHelperText>
                 ) : (
                   <FormHelperText id="helper-tex-channel-subnet-label">
@@ -252,7 +251,7 @@ const EditModal = ({ open, tokenId, onCancel, onOk }) => {
                   </LocalizationProvider>
                   {errors.expired_time && (
                     <FormHelperText error id="helper-tex-channel-expired_time-label">
-                      {errors.expired_time}
+                      {typeof errors.expired_time === 'string' ? errors.expired_time : ''}
                     </FormHelperText>
                   )}
                 </FormControl>
@@ -285,7 +284,7 @@ const EditModal = ({ open, tokenId, onCancel, onOk }) => {
 
                 {touched.remain_quota && errors.remain_quota && (
                   <FormHelperText error id="helper-tex-channel-remain_quota-label">
-                    {errors.remain_quota}
+                    {typeof errors.remain_quota === 'string' ? errors.remain_quota : ''}
                   </FormHelperText>
                 )}
               </FormControl>

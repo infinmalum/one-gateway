@@ -1,4 +1,3 @@
-// @ts-nocheck
 import PropTypes from 'prop-types';
 import * as Yup from 'yup';
 import { Formik } from 'formik';
@@ -33,18 +32,18 @@ const validationSchema = Yup.object().shape({
   display_name: Yup.string(),
   password: Yup.string().when('is_edit', {
     is: false,
-    then: Yup.string().required('密码 不能为空'),
-    otherwise: Yup.string()
+    then: () => Yup.string().required('密码 不能为空'),
+    otherwise: () => Yup.string()
   }),
   group: Yup.string().when('is_edit', {
     is: false,
-    then: Yup.string().required('用户组 不能为空'),
-    otherwise: Yup.string()
+    then: () => Yup.string().required('用户组 不能为空'),
+    otherwise: () => Yup.string()
   }),
   quota: Yup.number().when('is_edit', {
     is: false,
-    then: Yup.number().min(0, '额度 不能小于 0'),
-    otherwise: Yup.number()
+    then: () => Yup.number().min(0, '额度 不能小于 0'),
+    otherwise: () => Yup.number()
   })
 });
 
@@ -150,7 +149,7 @@ const EditModal = ({ open, userId, onCancel, onOk }) => {
                 />
                 {touched.username && errors.username && (
                   <FormHelperText error id="helper-tex-channel-username-label">
-                    {errors.username}
+                    {typeof errors.username === 'string' ? errors.username : ''}
                   </FormHelperText>
                 )}
               </FormControl>
@@ -170,7 +169,7 @@ const EditModal = ({ open, userId, onCancel, onOk }) => {
                 />
                 {touched.display_name && errors.display_name && (
                   <FormHelperText error id="helper-tex-channel-display_name-label">
-                    {errors.display_name}
+                    {typeof errors.display_name === 'string' ? errors.display_name : ''}
                   </FormHelperText>
                 )}
               </FormControl>
@@ -203,7 +202,7 @@ const EditModal = ({ open, userId, onCancel, onOk }) => {
                 />
                 {touched.password && errors.password && (
                   <FormHelperText error id="helper-tex-channel-password-label">
-                    {errors.password}
+                    {typeof errors.password === 'string' ? errors.password : ''}
                   </FormHelperText>
                 )}
               </FormControl>
@@ -227,7 +226,7 @@ const EditModal = ({ open, userId, onCancel, onOk }) => {
 
                     {touched.quota && errors.quota && (
                       <FormHelperText error id="helper-tex-channel-quota-label">
-                        {errors.quota}
+                        {typeof errors.quota === 'string' ? errors.quota : ''}
                       </FormHelperText>
                     )}
                   </FormControl>
@@ -242,11 +241,11 @@ const EditModal = ({ open, userId, onCancel, onOk }) => {
                       onBlur={handleBlur}
                       onChange={handleChange}
                       MenuProps={{
-                        PaperProps: {
+                        slotProps: { paper: {
                           style: {
                             maxHeight: 200
                           }
-                        }
+                        } }
                       }}
                     >
                       {groupOptions.map((option) => {
@@ -259,7 +258,7 @@ const EditModal = ({ open, userId, onCancel, onOk }) => {
                     </Select>
                     {touched.group && errors.group && (
                       <FormHelperText error id="helper-tex-channel-group-label">
-                        {errors.group}
+                        {typeof errors.group === 'string' ? errors.group : ''}
                       </FormHelperText>
                     )}
                   </FormControl>

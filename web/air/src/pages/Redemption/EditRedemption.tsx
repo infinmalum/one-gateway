@@ -1,4 +1,4 @@
-// @ts-nocheck
+import { LegacyInput } from '../../components/SemiFormCompat';
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { API, downloadTextAsFile, isMobile, showError, showSuccess } from '../../helpers';
@@ -56,9 +56,11 @@ const EditRedemption = (props) => {
   const submit = async () => {
     if (!isEdit && inputs.name === '') return;
     setLoading(true);
-    let localInputs = inputs;
-    localInputs.count = parseInt(localInputs.count);
-    localInputs.quota = parseInt(localInputs.quota);
+    const localInputs = {
+      ...inputs,
+      count: Number(inputs.count),
+      quota: Number(inputs.quota),
+    };
     let res;
     if (isEdit) {
       res = await API.put(`/api/redemption/`, { ...localInputs, id: parseInt(props.editingRedemption.id) });
@@ -108,7 +110,7 @@ const EditRedemption = (props) => {
     <>
       <SideSheet
         placement={isEdit ? 'right' : 'left'}
-        title={<Title level={3}>{isEdit ? '更新兑换码信息' : '创建新的兑换码'}</Title>}
+        title={<Title heading={3}>{isEdit ? '更新兑换码信息' : '创建新的兑换码'}</Title>}
         headerStyle={{ borderBottom: '1px solid var(--semi-color-border)' }}
         bodyStyle={{ borderBottom: '1px solid var(--semi-color-border)' }}
         visible={props.visiable}
@@ -125,7 +127,7 @@ const EditRedemption = (props) => {
         width={isMobile() ? '100%' : 600}
       >
         <Spin spinning={loading}>
-          <Input
+          <LegacyInput
             style={{ marginTop: 20 }}
             label="名称"
             name="name"
@@ -161,7 +163,7 @@ const EditRedemption = (props) => {
             !isEdit && <>
               <Divider />
               <Typography.Text>生成数量</Typography.Text>
-              <Input
+              <LegacyInput
                 style={{ marginTop: 8 }}
                 label="生成数量"
                 name="count"

@@ -1,7 +1,7 @@
 // material-ui
 import logoLight from 'assets/images/logo.svg';
 import logoDark from 'assets/images/logo-white.svg';
-import { useSelector } from 'react-redux';
+import { useAppSelector as useSelector } from 'store/hooks';
 import { useTheme } from '@mui/material/styles';
 
 /**

@@ -1,5 +1,5 @@
-// @ts-nocheck
-import { Typography, Stack, OutlinedInput, InputAdornment, Button, InputLabel, FormControl } from '@mui/material';
+import { Typography, OutlinedInput, InputAdornment, Button, InputLabel, FormControl } from '@mui/material';
+import Stack from 'ui-component/LegacyStack';
 import { IconWallet } from '@tabler/icons-react';
 import { useTheme } from '@mui/material/styles';
 import SubCard from 'ui-component/cards/SubCard';
@@ -62,9 +62,9 @@ const TopupCard = () => {
   };
 
   useEffect(() => {
-    let status = localStorage.getItem('siteInfo');
-    if (status) {
-      status = JSON.parse(status);
+    const storedStatus = localStorage.getItem('siteInfo');
+    if (storedStatus) {
+      const status = JSON.parse(storedStatus) as { top_up_link?: string };
       if (status.top_up_link) {
         setTopUpLink(status.top_up_link);
       }

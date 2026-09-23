@@ -1,5 +1,5 @@
-// @ts-nocheck
-import { Stack, Alert } from '@mui/material';
+import { Alert } from '@mui/material';
+import Stack from 'ui-component/LegacyStack';
 import Grid from 'ui-component/LegacyGrid';
 import TopupCard from './component/TopupCard';
 import InviteCard from './component/InviteCard';

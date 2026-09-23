@@ -1,4 +1,3 @@
-// @ts-nocheck
 import React, {useEffect, useState} from 'react';
 import {useTranslation} from 'react-i18next';
 import {Button, Card, Form, Input, Message} from 'semantic-ui-react';
@@ -206,16 +205,19 @@ const EditChannel = () => {
       localInputs.other = '2024-03-01-preview';
     }
     let res;
-    localInputs.models = localInputs.models.join(',');
-    localInputs.group = localInputs.groups.join(',');
-    localInputs.config = JSON.stringify(config);
+    const payload = {
+      ...localInputs,
+      models: localInputs.models.join(','),
+      group: localInputs.groups.join(','),
+      config: JSON.stringify(config),
+    };
     if (isEdit) {
       res = await API.put(`/api/channel/`, {
-        ...localInputs,
+        ...payload,
         id: parseInt(channelId),
       });
     } else {
-      res = await API.post(`/api/channel/`, localInputs);
+      res = await API.post(`/api/channel/`, payload);
     }
     const { success, message } = res.data;
     if (success) {

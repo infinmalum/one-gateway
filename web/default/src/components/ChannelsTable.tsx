@@ -1,4 +1,3 @@
-// @ts-nocheck
 import React, {useEffect, useState} from 'react';
 import {useTranslation} from 'react-i18next';
 import {Button, Dropdown, Form, Input, Label, Message, Pagination, Popup, Table,} from 'semantic-ui-react';
@@ -132,7 +131,9 @@ const ChannelsTable = () => {
     setLoading(false);
   };
 
-  const onPaginationChange = (e, { activePage }) => {
+  const onPaginationChange = (e, { activePage: rawPage }: { activePage?: number | string }) => {
+    const activePage = Number(rawPage);
+    if (!Number.isFinite(activePage)) return;
     (async () => {
       if (activePage === Math.ceil(channels.length / ITEMS_PER_PAGE) + 1) {
         // In this case we have to load more data and then append them.
@@ -161,8 +162,8 @@ const ChannelsTable = () => {
     loadChannelModels().then();
   }, []);
 
-  const manageChannel = async (id, action, idx, value) => {
-    let data = { id };
+  const manageChannel = async (id, action, idx, value = '') => {
+    const data: { id: number; status?: number; priority?: number; weight?: number } = { id };
     let res;
     switch (action) {
       case 'delete':
@@ -253,8 +254,7 @@ const ChannelsTable = () => {
   };
 
   const renderResponseTime = (responseTime, t) => {
-    let time = responseTime / 1000;
-    time = time.toFixed(2) + 's';
+    const time = (responseTime / 1000).toFixed(2) + 's';
     if (responseTime === 0) {
       return (
         <Label basic color='grey'>

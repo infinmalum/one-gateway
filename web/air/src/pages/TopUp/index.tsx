@@ -1,4 +1,4 @@
-// @ts-nocheck
+import { LegacyFormInput } from '../../components/SemiFormCompat';
 import React, {useEffect, useState} from 'react';
 import {API, isMobile, showError, showInfo, showSuccess} from '../../helpers';
 import {renderNumber, renderQuota} from '../../helpers/render';
@@ -84,7 +84,7 @@ const TopUp = () => {
         setOpen(false);
         try {
             const res = await API.post('/api/user/pay', {
-                amount: parseInt(topUpCount),
+                amount: Number(topUpCount),
                 top_up_code: topUpCode,
                 payment_method: payWay
             });
@@ -138,9 +138,9 @@ const TopUp = () => {
     }
 
     useEffect(() => {
-        let status = localStorage.getItem('status');
-        if (status) {
-            status = JSON.parse(status);
+        const storedStatus = localStorage.getItem('status');
+        if (storedStatus) {
+            const status = JSON.parse(storedStatus) as import('../../types/site').SiteStatus;
             if (status.top_up_link) {
                 setTopUpLink(status.top_up_link);
             }
@@ -159,13 +159,13 @@ const TopUp = () => {
         return amount + '元';
     }
 
-    const getAmount = async (value) => {
+    const getAmount = async (value = topUpCount) => {
         if (value === undefined) {
             value = topUpCount;
         }
         try {
             const res = await API.post('/api/user/amount', {
-                amount: parseFloat(value),
+                amount: Number(value),
                 top_up_code: topUpCode
             });
             if (res !== undefined) {
@@ -215,13 +215,13 @@ const TopUp = () => {
                         <Card
                             style={{width: '500px', padding: '20px'}}
                         >
-                            <Title level={3} style={{textAlign: 'center'}}>余额 {renderQuota(userQuota)}</Title>
+                            <Title heading={3} style={{textAlign: 'center'}}>余额 {renderQuota(userQuota)}</Title>
                             <div style={{marginTop: 20}}>
                                 <Divider>
                                     兑换余额
                                 </Divider>
                                 <Form>
-                                    <Form.Input
+                                    <LegacyFormInput
                                         field={'redemptionCode'}
                                         label={'兑换码'}
                                         placeholder='兑换码'
@@ -250,7 +250,7 @@ const TopUp = () => {
                                     在线充值
                                 </Divider>
                                 <Form>
-                                    <Form.Input
+                                    <LegacyFormInput
                                         disabled={!enableOnlineTopUp}
                                         field={'redemptionCount'}
                                         label={'实付金额：' + renderAmount()}

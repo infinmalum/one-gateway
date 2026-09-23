@@ -1,4 +1,3 @@
-// @ts-nocheck
 import {Label} from 'semantic-ui-react';
 import {Tag} from "@douyinfe/semi-ui";
 
@@ -25,7 +24,7 @@ export function renderGroup(group) {
             if (group === 'default') {
                 return <Tag size='large'>{group}</Tag>;
             } else {
-                return <Tag size='large' color={stringToColor(group)}>{group}</Tag>;
+                return <Tag size='large' style={{ backgroundColor: stringToColor(group) }}>{group}</Tag>;
             }
         })}
     </>;
@@ -53,10 +52,10 @@ export function renderQuotaNumberWithDigit(num, digits = 2) {
 }
 
 export function renderNumberWithPoint(num) {
-    num = num.toFixed(2);
+    const formatted = num.toFixed(2);
     if (num >= 100000) {
         // Convert number to string to manipulate it
-        let numStr = num.toString();
+        let numStr = formatted;
         // Find the position of the decimal point
         let decimalPointIndex = numStr.indexOf('.');
 
@@ -77,35 +76,29 @@ export function renderNumberWithPoint(num) {
     }
 
     // If the number is less than 100,000, return it unmodified
-    return num;
+    return formatted;
 }
 
 export function getQuotaPerUnit() {
-    let quotaPerUnit = localStorage.getItem('quota_per_unit');
-    quotaPerUnit = parseFloat(quotaPerUnit);
-    return quotaPerUnit;
+    return parseFloat(localStorage.getItem('quota_per_unit') ?? '0');
 }
 
 export function getQuotaWithUnit(quota, digits = 6) {
-    let quotaPerUnit = localStorage.getItem('quota_per_unit');
-    quotaPerUnit = parseFloat(quotaPerUnit);
+    const quotaPerUnit = parseFloat(localStorage.getItem('quota_per_unit') ?? '0');
     return (quota / quotaPerUnit).toFixed(digits);
 }
 
 export function renderQuota(quota, digits = 2) {
-    let quotaPerUnit = localStorage.getItem('quota_per_unit');
-    let displayInCurrency = localStorage.getItem('display_in_currency');
-    quotaPerUnit = parseFloat(quotaPerUnit);
-    displayInCurrency = displayInCurrency === 'true';
+    const quotaPerUnit = parseFloat(localStorage.getItem('quota_per_unit') ?? '0');
+    const displayInCurrency = localStorage.getItem('display_in_currency') === 'true';
     if (displayInCurrency) {
         return '$' + (quota / quotaPerUnit).toFixed(digits);
     }
     return renderNumber(quota);
 }
 
-export function renderQuotaWithPrompt(quota, digits) {
-    let displayInCurrency = localStorage.getItem('display_in_currency');
-    displayInCurrency = displayInCurrency === 'true';
+export function renderQuotaWithPrompt(quota, digits = 2) {
+    const displayInCurrency = localStorage.getItem('display_in_currency') === 'true';
     if (displayInCurrency) {
         return `（等价金额：${renderQuota(quota, digits)}）`;
     }

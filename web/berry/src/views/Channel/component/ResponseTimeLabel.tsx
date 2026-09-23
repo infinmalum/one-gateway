@@ -1,13 +1,11 @@
-// @ts-nocheck
 import PropTypes from 'prop-types';
-import Label from 'ui-component/Label';
+import Label, { type LabelColor } from 'ui-component/Label';
 import Tooltip from '@mui/material/Tooltip';
 import { timestamp2string } from 'utils/common';
 
 const ResponseTimeLabel = ({ test_time, response_time, handle_action }) => {
-  let color = 'default';
-  let time = response_time / 1000;
-  time = time.toFixed(2) + ' 秒';
+  let color: LabelColor = 'default';
+  const time = (response_time / 1000).toFixed(2) + ' 秒';
 
   if (response_time === 0) {
     color = 'default';

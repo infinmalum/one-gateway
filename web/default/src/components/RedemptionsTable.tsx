@@ -1,4 +1,3 @@
-// @ts-nocheck
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -81,7 +80,9 @@ const RedemptionsTable = () => {
     setLoading(false);
   };
 
-  const onPaginationChange = (e, { activePage }) => {
+  const onPaginationChange = (e, { activePage: rawPage }: { activePage?: number | string }) => {
+    const activePage = Number(rawPage);
+    if (!Number.isFinite(activePage)) return;
     (async () => {
       if (activePage === Math.ceil(redemptions.length / ITEMS_PER_PAGE) + 1) {
         // In this case we have to load more data and then append them.
@@ -100,7 +101,7 @@ const RedemptionsTable = () => {
   }, []);
 
   const manageRedemption = async (id, action, idx) => {
-    let data = { id };
+    const data: { id: number; status?: number } = { id };
     let res;
     switch (action) {
       case 'delete':

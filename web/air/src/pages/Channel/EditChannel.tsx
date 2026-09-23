@@ -1,4 +1,4 @@
-// @ts-nocheck
+import { LegacyInput, LegacyTextArea } from '../../components/SemiFormCompat';
 import React, {useEffect, useRef, useState} from 'react';
 import {useNavigate, useParams} from 'react-router-dom';
 import {API, isMobile, showError, showInfo, showSuccess, verifyJSON} from '../../helpers';
@@ -244,12 +244,15 @@ const EditChannel = (props) => {
             return;
         }
         localInputs.auto_ban = autoBan ? 1 : 0;
-        localInputs.models = localInputs.models.join(',');
-        localInputs.group = localInputs.groups.join(',');
+        const payload = {
+            ...localInputs,
+            models: localInputs.models.join(','),
+            group: localInputs.groups.join(','),
+        };
         if (isEdit) {
-            res = await API.put(`/api/channel/`, {...localInputs, id: parseInt(channelId)});
+            res = await API.put(`/api/channel/`, {...payload, id: parseInt(channelId)});
         } else {
-            res = await API.post(`/api/channel/`, localInputs);
+            res = await API.post(`/api/channel/`, payload);
         }
         const {success, message} = res.data;
         if (success) {
@@ -289,7 +292,7 @@ const EditChannel = (props) => {
             <SideSheet
                 maskClosable={false}
                 placement={isEdit ? 'right' : 'left'}
-                title={<Title level={3}>{isEdit ? '更新渠道信息' : '创建新的渠道'}</Title>}
+                title={<Title heading={3}>{isEdit ? '更新渠道信息' : '创建新的渠道'}</Title>}
                 headerStyle={{borderBottom: '1px solid var(--semi-color-border)'}}
                 bodyStyle={{borderBottom: '1px solid var(--semi-color-border)'}}
                 visible={props.visible}
@@ -310,8 +313,6 @@ const EditChannel = (props) => {
                         <Typography.Text strong>类型：</Typography.Text>
                     </div>
                     <Select
-                      name='type'
-                      required
                       optionList={CHANNEL_OPTIONS}
                       value={inputs.type}
                       onChange={value => handleInputChange('type', value)}
@@ -334,7 +335,7 @@ const EditChannel = (props) => {
                             <div style={{ marginTop: 10 }}>
                                 <Typography.Text strong>AZURE_OPENAI_ENDPOINT：</Typography.Text>
                             </div>
-                            <Input
+                            <LegacyInput
                               label='AZURE_OPENAI_ENDPOINT'
                               name='azure_base_url'
                               placeholder={'请输入 AZURE_OPENAI_ENDPOINT，例如：https://docs-test-001.openai.azure.com'}
@@ -347,7 +348,7 @@ const EditChannel = (props) => {
                             <div style={{ marginTop: 10 }}>
                                 <Typography.Text strong>默认 API 版本：</Typography.Text>
                             </div>
-                            <Input
+                            <LegacyInput
                               label='默认 API 版本'
                               name='azure_other'
                               placeholder={'请输入默认 API 版本，例如：2024-03-01-preview，该配置可以被实际的请求查询参数所覆盖'}
@@ -366,7 +367,7 @@ const EditChannel = (props) => {
                             <div style={{ marginTop: 10 }}>
                                 <Typography.Text strong>Base URL：</Typography.Text>
                             </div>
-                            <Input
+                            <LegacyInput
                               name='base_url'
                               placeholder={'请输入自定义渠道的 Base URL'}
                               onChange={value => {
@@ -381,7 +382,7 @@ const EditChannel = (props) => {
                     <div style={{ marginTop: 10 }}>
                         <Typography.Text strong>名称：</Typography.Text>
                     </div>
-                    <Input
+                    <LegacyInput
                       required
                       name='name'
                       placeholder={'请为渠道命名'}
@@ -396,17 +397,11 @@ const EditChannel = (props) => {
                     </div>
                     <Select
                       placeholder={'请选择可以使用该渠道的分组'}
-                      name='groups'
-                      required
                       multiple
-                      selection
-                      allowAdditions
-                      additionLabel={'请在系统设置页面编辑分组倍率以添加新的分组：'}
                       onChange={value => {
                           handleInputChange('groups', value)
                       }}
                       value={inputs.groups}
-                      autoComplete='new-password'
                       optionList={groupOptions}
                     />
                     {
@@ -415,7 +410,7 @@ const EditChannel = (props) => {
                             <div style={{ marginTop: 10 }}>
                                 <Typography.Text strong>模型版本：</Typography.Text>
                             </div>
-                            <Input
+                            <LegacyInput
                               name='other'
                               placeholder={'请输入星火大模型版本，注意是接口地址中的版本号，例如：v2.1'}
                               onChange={value => {
@@ -433,7 +428,7 @@ const EditChannel = (props) => {
                             <div style={{ marginTop: 10 }}>
                                 <Typography.Text strong>知识库 ID：</Typography.Text>
                             </div>
-                            <Input
+                            <LegacyInput
                               label='知识库 ID'
                               name='other'
                               placeholder={'请输入知识库 ID，例如：123456'}
@@ -451,15 +446,11 @@ const EditChannel = (props) => {
                     </div>
                     <Select
                       placeholder={'请选择该渠道所支持的模型'}
-                      name='models'
-                      required
                       multiple
-                      selection
                       onChange={value => {
                           handleInputChange('models', value)
                       }}
                       value={inputs.models}
-                      autoComplete='new-password'
                       optionList={modelOptions}
                     />
                     <div style={{ lineHeight: '40px', marginBottom: '12px' }}>
@@ -474,7 +465,7 @@ const EditChannel = (props) => {
                                 handleInputChange('models', []);
                             }}>清除所有模型</Button>
                         </Space>
-                        <Input
+                        <LegacyInput
                           addonAfter={
                               <Button type='primary' onClick={addCustomModel}>填入</Button>
                           }
@@ -488,7 +479,7 @@ const EditChannel = (props) => {
                     <div style={{ marginTop: 10 }}>
                         <Typography.Text strong>模型重定向：</Typography.Text>
                     </div>
-                    <TextArea
+                    <LegacyTextArea
                       placeholder={`此项可选，用于修改请求体中的模型名称，为一个 JSON 字符串，键为请求中模型名称，值为要替换的模型名称，例如：\n${JSON.stringify(MODEL_MAPPING_EXAMPLE, null, 2)}`}
                       name='model_mapping'
                       onChange={value => {
@@ -501,7 +492,7 @@ const EditChannel = (props) => {
                     <div style={{ marginTop: 10 }}>
                         <Typography.Text strong>系统提示词：</Typography.Text>
                     </div>
-                    <TextArea
+                    <LegacyTextArea
                       placeholder={`此项可选，用于强制设置给定的系统提示词，请配合自定义模型 & 模型重定向使用，首先创建一个唯一的自定义模型名称并在上面填入，之后将该自定义模型重定向映射到该渠道一个原生支持的模型`}
                       name='system_prompt'
                       onChange={value => {
@@ -527,7 +518,7 @@ const EditChannel = (props) => {
                     </div>
                     {
                         batch ?
-                          <TextArea
+                          <LegacyTextArea
                             label='密钥'
                             name='key'
                             required
@@ -540,7 +531,7 @@ const EditChannel = (props) => {
                             autoComplete='new-password'
                           />
                           :
-                          <Input
+                          <LegacyInput
                             label='密钥'
                             name='key'
                             required
@@ -555,7 +546,7 @@ const EditChannel = (props) => {
                     <div style={{ marginTop: 10 }}>
                         <Typography.Text strong>组织：</Typography.Text>
                     </div>
-                    <Input
+                    <LegacyInput
                       label='组织，可选，不填则为默认组织'
                       name='openai_organization'
                       placeholder='请输入组织org-xxx'
@@ -602,7 +593,7 @@ const EditChannel = (props) => {
                             <div style={{ marginTop: 10 }}>
                                 <Typography.Text strong>代理：</Typography.Text>
                             </div>
-                            <Input
+                            <LegacyInput
                               label='代理'
                               name='base_url'
                               placeholder={'此项可选，用于通过代理站来进行 API 调用'}
@@ -621,7 +612,7 @@ const EditChannel = (props) => {
                             <div style={{ marginTop: 10 }}>
                                 <Typography.Text strong>私有部署地址：</Typography.Text>
                             </div>
-                            <Input
+                            <LegacyInput
                               name='base_url'
                               placeholder={'请输入私有部署地址，格式为：https://fastgpt.run/api/openapi'}
                               onChange={value => {

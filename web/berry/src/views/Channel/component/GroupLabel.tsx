@@ -1,7 +1,6 @@
-// @ts-nocheck
 import PropTypes from "prop-types";
 import Label from "ui-component/Label";
-import Stack from "@mui/material/Stack";
+import Stack from 'ui-component/LegacyStack';
 import Divider from "@mui/material/Divider";
 
 function name2color(name) {

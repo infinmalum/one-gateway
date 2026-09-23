@@ -1,25 +1,14 @@
-// @ts-nocheck
 import { useState, useEffect } from 'react';
-import { useSelector } from 'react-redux';
+import { useAppSelector as useSelector } from 'store/hooks';
 import useRegister from 'hooks/useRegister';
 import Turnstile from 'react-turnstile';
 import { useSearchParams } from 'react-router-dom';
-// import { useSelector } from 'react-redux';
+// import { useAppSelector as useSelector } from 'store/hooks';
 
 // material-ui
 import { useTheme } from '@mui/material/styles';
-import {
-  Box,
-  Button,
-  FormControl,
-  FormHelperText,
-  Grid,
-  IconButton,
-  InputAdornment,
-  InputLabel,
-  OutlinedInput,
-  Typography
-} from '@mui/material';
+import { Box, Button, FormControl, FormHelperText, IconButton, InputAdornment, InputLabel, OutlinedInput, Typography } from '@mui/material';
+import Grid from 'ui-component/LegacyGrid';
 
 // third party
 import * as Yup from 'yup';
@@ -49,7 +38,7 @@ const RegisterForm = ({ ...others }) => {
   const [turnstileToken, setTurnstileToken] = useState('');
 
   const [strength, setStrength] = useState(0);
-  const [level, setLevel] = useState();
+  const [level, setLevel] = useState<{ label: string; color: string }>({ label: '', color: '' });
 
   const handleClickShowPassword = () => {
     setShowPassword(!showPassword);
@@ -148,7 +137,7 @@ const RegisterForm = ({ ...others }) => {
               />
               {touched.username && errors.username && (
                 <FormHelperText error id="standard-weight-helper-text--register">
-                  {errors.username}
+                  {typeof errors.username === 'string' ? errors.username : ''}
                 </FormHelperText>
               )}
             </FormControl>
@@ -184,7 +173,7 @@ const RegisterForm = ({ ...others }) => {
               />
               {touched.password && errors.password && (
                 <FormHelperText error id="standard-weight-helper-text-password-register">
-                  {errors.password}
+                  {typeof errors.password === 'string' ? errors.password : ''}
                 </FormHelperText>
               )}
             </FormControl>
@@ -206,7 +195,7 @@ const RegisterForm = ({ ...others }) => {
               />
               {touched.confirmPassword && errors.confirmPassword && (
                 <FormHelperText error id="standard-weight-helper-text-confirm-password-register">
-                  {errors.confirmPassword}
+                  {typeof errors.confirmPassword === 'string' ? errors.confirmPassword : ''}
                 </FormHelperText>
               )}
             </FormControl>
@@ -219,7 +208,7 @@ const RegisterForm = ({ ...others }) => {
                       <Box style={{ backgroundColor: level?.color }} sx={{ width: 85, height: 8, borderRadius: '7px' }} />
                     </Grid>
                     <Grid item>
-                      <Typography variant="subtitle1" fontSize="0.75rem">
+                      <Typography variant="subtitle1" sx={{ fontSize: '0.75rem' }}>
                         {level?.label}
                       </Typography>
                     </Grid>
@@ -250,7 +239,7 @@ const RegisterForm = ({ ...others }) => {
                   />
                   {touched.email && errors.email && (
                     <FormHelperText error id="standard-weight-helper-text--register">
-                      {errors.email}
+                      {typeof errors.email === 'string' ? errors.email : ''}
                     </FormHelperText>
                   )}
                 </FormControl>
@@ -271,7 +260,7 @@ const RegisterForm = ({ ...others }) => {
                   />
                   {touched.verification_code && errors.verification_code && (
                     <FormHelperText error id="standard-weight-helper-text--register">
-                      {errors.verification_code}
+                      {typeof errors.verification_code === 'string' ? errors.verification_code : ''}
                     </FormHelperText>
                   )}
                 </FormControl>
@@ -280,7 +269,7 @@ const RegisterForm = ({ ...others }) => {
 
             {errors.submit && (
               <Box sx={{ mt: 3 }}>
-                <FormHelperText error>{errors.submit}</FormHelperText>
+                <FormHelperText error>{typeof errors.submit === 'string' ? errors.submit : ''}</FormHelperText>
               </Box>
             )}
             {turnstileEnabled ? (

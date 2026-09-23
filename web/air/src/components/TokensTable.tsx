@@ -1,4 +1,4 @@
-// @ts-nocheck
+import { LegacyFormInput } from './SemiFormCompat';
 import React, { useEffect, useState } from 'react';
 import { API, copy, showError, showSuccess, timestamp2string } from '../helpers';
 
@@ -45,31 +45,11 @@ function renderStatus(status, model_limits_enabled = false) {
     case 4:
       return <Tag color="grey" size="large"> 已耗尽 </Tag>;
     default:
-      return <Tag color="black" size="large"> 未知状态 </Tag>;
+      return <Tag color="grey" size="large"> 未知状态 </Tag>;
   }
 }
 
 const TokensTable = () => {
-
-  const link_menu = [
-    {
-      node: 'item', key: 'next', name: 'ChatGPT Next Web', onClick: () => {
-        onOpenLink('next');
-      }
-    },
-    { node: 'item', key: 'ama', name: 'AMA 问天', value: 'ama' },
-    {
-      node: 'item', key: 'next-mj', name: 'ChatGPT Web & Midjourney', value: 'next-mj', onClick: () => {
-        onOpenLink('next-mj');
-      }
-    },
-    { node: 'item', key: 'opencat', name: 'OpenCat', value: 'opencat' },
-    {
-      node: 'item', key: 'lobechat', name: 'LobeChat', onClick: () => {
-        onOpenLink('lobechat');
-      }
-    }
-  ];
 
   const columns = [
     {
@@ -160,8 +140,7 @@ const TokensTable = () => {
               [
                 {
                   node: 'item',
-                  key: 'next',
-                  disabled: !localStorage.getItem('chat_link'),
+                                    disabled: !localStorage.getItem('chat_link'),
                   name: 'ChatGPT Next Web',
                   onClick: () => {
                     onOpenLink('next', record.key);
@@ -169,25 +148,24 @@ const TokensTable = () => {
                 },
                 {
                   node: 'item',
-                  key: 'next-mj',
-                  disabled: !localStorage.getItem('chat_link2'),
+                                    disabled: !localStorage.getItem('chat_link2'),
                   name: 'ChatGPT Web & Midjourney',
                   onClick: () => {
                     onOpenLink('next-mj', record.key);
                   }
                 },
                 {
-                  node: 'item', key: 'ama', name: 'AMA 问天（BotGem）', onClick: () => {
+                  node: 'item', name: 'AMA 问天（BotGem）', onClick: () => {
                     onOpenLink('ama', record.key);
                   }
                 },
                 {
-                  node: 'item', key: 'opencat', name: 'OpenCat', onClick: () => {
+                  node: 'item', name: 'OpenCat', onClick: () => {
                     onOpenLink('opencat', record.key);
                   }
                 },
                 {
-                  node: 'item', key: 'lobechat', name: 'LobeChat', onClick: () => {
+                  node: 'item', name: 'LobeChat', onClick: () => {
                     onOpenLink('lobechat');
                   }
                 }
@@ -304,7 +282,7 @@ const TokensTable = () => {
     (async () => {
       if (activePage === Math.ceil(tokens.length / pageSize) + 1) {
         // In this case we have to load more data and then append them.
-        await loadTokens(activePage - 1, orderBy);
+        await loadTokens(activePage - 1);
       }
       setActivePage(activePage);
     })();
@@ -315,11 +293,10 @@ const TokensTable = () => {
   };
 
   const onCopy = async (type, key) => {
-    let status = localStorage.getItem('status');
+    const storedStatus = localStorage.getItem('status');
     let serverAddress = '';
-    if (status) {
-      status = JSON.parse(status);
-      serverAddress = status.server_address;
+    if (storedStatus) {
+      serverAddress = (JSON.parse(storedStatus) as { server_address?: string }).server_address ?? '';
     }
     if (serverAddress === '') {
       serverAddress = window.location.origin;
@@ -366,12 +343,11 @@ const TokensTable = () => {
     }
   };
 
-  const onOpenLink = async (type, key) => {
-    let status = localStorage.getItem('status');
+  const onOpenLink = async (type, key = '') => {
+    const storedStatus = localStorage.getItem('status');
     let serverAddress = '';
-    if (status) {
-      status = JSON.parse(status);
-      serverAddress = status.server_address;
+    if (storedStatus) {
+      serverAddress = (JSON.parse(storedStatus) as { server_address?: string }).server_address ?? '';
     }
     if (serverAddress === '') {
       serverAddress = window.location.origin;
@@ -410,7 +386,7 @@ const TokensTable = () => {
   };
 
   useEffect(() => {
-    loadTokens(0, orderBy)
+    loadTokens(0)
       .then()
       .catch((reason) => {
         showError(reason);
@@ -431,7 +407,7 @@ const TokensTable = () => {
 
   const manageToken = async (id, action, record) => {
     setLoading(true);
-    let data = { id };
+    const data: { id: number; status?: number } = { id };
     let res;
     switch (action) {
       case 'delete':
@@ -560,7 +536,7 @@ const TokensTable = () => {
     <>
       <EditToken refresh={refresh} editingToken={editingToken} visiable={showEdit} handleClose={closeEdit}></EditToken>
       <Form layout="horizontal" style={{ marginTop: 10 }} labelPosition={'left'}>
-        <Form.Input
+        <LegacyFormInput
           field="keyword"
           label="搜索关键字"
           placeholder="令牌名称"
@@ -568,7 +544,7 @@ const TokensTable = () => {
           loading={searching}
           onChange={handleKeywordChange}
         />
-        {/* <Form.Input
+        {/* <LegacyFormInput
           field="token"
           label="Key"
           placeholder="密钥"
@@ -585,7 +561,7 @@ const TokensTable = () => {
         pageSize: pageSize,
         total: tokenCount,
         showSizeChanger: true,
-        pageSizeOptions: [10, 20, 50, 100],
+        pageSizeOpts: [10, 20, 50, 100],
         formatPageText: (page) => `第 ${page.currentStart} - ${page.currentEnd} 条，共 ${tokens.length} 条`,
         onPageSizeChange: (size) => {
           setPageSize(size);

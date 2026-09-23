@@ -1,4 +1,4 @@
-// @ts-nocheck
+import { LegacyFormInput, LegacyFormDatePicker } from '../../components/SemiFormCompat';
 import React, {useEffect, useRef, useState} from 'react';
 import {Button, Col, Form, Layout, Row, Spin} from "@douyinfe/semi-ui";
 import VChart from '@visactor/vchart';
@@ -106,6 +106,9 @@ const Detail = (props) => {
             }
         },
         color: {
+            type: 'ordinal' as const,
+            domain: Object.keys(modelColorMap),
+            range: Object.values(modelColorMap),
             specified: modelColorMap
         }
     };
@@ -144,7 +147,8 @@ const Detail = (props) => {
         },
         title: {
             visible: true,
-            text: '模型调用次数占比'
+            text: '模型调用次数占比',
+            subtext: '0'
         },
         legends: {
             visible: true,
@@ -164,6 +168,9 @@ const Detail = (props) => {
             }
         },
         color: {
+            type: 'ordinal' as const,
+            domain: Object.keys(modelColorMap),
+            range: Object.values(modelColorMap),
             specified: modelColorMap
         }
     };
@@ -215,13 +222,13 @@ const Detail = (props) => {
     const initChart = async () => {
         let lineChart = modelDataChart
         if (!modelDataChart) {
-            lineChart = new VChart(spec_line, {dom: 'model_data'});
+            lineChart = new VChart(spec_line as ConstructorParameters<typeof VChart>[0], {dom: 'model_data'});
             setModelDataChart(lineChart);
             lineChart.renderAsync();
         }
         let pieChart = modelDataPieChart
         if (!modelDataPieChart) {
-            pieChart = new VChart(spec_pie, {dom: 'model_pie'});
+            pieChart = new VChart(spec_pie as ConstructorParameters<typeof VChart>[0], {dom: 'model_pie'});
             setModelDataPieChart(pieChart);
             pieChart.renderAsync();
         }
@@ -307,12 +314,12 @@ const Detail = (props) => {
                 <Layout.Content>
                     <Form ref={formRef} layout='horizontal' style={{marginTop: 10}}>
                         <>
-                            <Form.DatePicker field="start_timestamp" label='起始时间' style={{width: 272}}
+                            <LegacyFormDatePicker field="start_timestamp" label='起始时间' style={{width: 272}}
                                              initValue={start_timestamp}
                                              value={start_timestamp} type='dateTime'
                                              name='start_timestamp'
                                              onChange={value => handleInputChange(value, 'start_timestamp')}/>
-                            <Form.DatePicker field="end_timestamp" fluid label='结束时间' style={{width: 272}}
+                            <LegacyFormDatePicker field="end_timestamp" fluid label='结束时间' style={{width: 272}}
                                              initValue={end_timestamp}
                                              value={end_timestamp} type='dateTime'
                                              name='end_timestamp'
@@ -331,7 +338,7 @@ const Detail = (props) => {
                             </Form.Select>
                             {
                                 isAdminUser && <>
-                                    <Form.Input field="username" label='用户名称' style={{width: 176}} value={username}
+                                    <LegacyFormInput field="username" label='用户名称' style={{width: 176}} value={username}
                                                 placeholder={'可选值'} name='username'
                                                 onChange={value => handleInputChange(value, 'username')}/>
                                 </>

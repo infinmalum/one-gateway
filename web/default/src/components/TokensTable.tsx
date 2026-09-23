@@ -1,4 +1,3 @@
-// @ts-nocheck
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -106,11 +105,13 @@ const TokensTable = () => {
     setLoading(false);
   };
 
-  const onPaginationChange = (e, { activePage }) => {
+  const onPaginationChange = (e, { activePage: rawPage }: { activePage?: number | string }) => {
+    const activePage = Number(rawPage);
+    if (!Number.isFinite(activePage)) return;
     (async () => {
       if (activePage === Math.ceil(tokens.length / ITEMS_PER_PAGE) + 1) {
         // In this case we have to load more data and then append them.
-        await loadTokens(activePage - 1, orderBy);
+        await loadTokens(activePage - 1);
       }
       setActivePage(activePage);
     })();
@@ -122,11 +123,10 @@ const TokensTable = () => {
   };
 
   const onCopy = async (type, key) => {
-    let status = localStorage.getItem('status');
+    const storedStatus = localStorage.getItem('status');
     let serverAddress = '';
-    if (status) {
-      status = JSON.parse(status);
-      serverAddress = status.server_address;
+    if (storedStatus) {
+      serverAddress = (JSON.parse(storedStatus) as { server_address?: string }).server_address ?? '';
     }
     if (serverAddress === '') {
       serverAddress = window.location.origin;
@@ -170,11 +170,10 @@ const TokensTable = () => {
   };
 
   const onOpenLink = async (type, key) => {
-    let status = localStorage.getItem('status');
+    const storedStatus = localStorage.getItem('status');
     let serverAddress = '';
-    if (status) {
-      status = JSON.parse(status);
-      serverAddress = status.server_address;
+    if (storedStatus) {
+      serverAddress = (JSON.parse(storedStatus) as { server_address?: string }).server_address ?? '';
     }
     if (serverAddress === '') {
       serverAddress = window.location.origin;
@@ -213,7 +212,7 @@ const TokensTable = () => {
   };
 
   useEffect(() => {
-    loadTokens(0, orderBy)
+    loadTokens(0)
       .then()
       .catch((reason) => {
         showError(reason);
@@ -221,7 +220,7 @@ const TokensTable = () => {
   }, [orderBy]);
 
   const manageToken = async (id, action, idx) => {
-    let data = { id };
+    const data: { id: number; status?: number } = { id };
     let res;
     switch (action) {
       case 'delete':

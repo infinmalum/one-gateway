@@ -1,4 +1,3 @@
-// @ts-nocheck
 import React, { useContext, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -34,7 +33,7 @@ const PersonalSetting = () => {
     email: '',
     self_account_deletion_confirmation: '',
   });
-  const [status, setStatus] = useState({});
+  const [status, setStatus] = useState<import('../types/site').SiteStatus>({});
   const [showWeChatBindModal, setShowWeChatBindModal] = useState(false);
   const [showEmailBindModal, setShowEmailBindModal] = useState(false);
   const [showAccountDeleteModal, setShowAccountDeleteModal] = useState(false);
@@ -48,13 +47,13 @@ const PersonalSetting = () => {
   const [systemToken, setSystemToken] = useState('');
 
   useEffect(() => {
-    let status = localStorage.getItem('status');
-    if (status) {
-      status = JSON.parse(status);
+    const storedStatus = localStorage.getItem('status');
+    if (storedStatus) {
+      const status = JSON.parse(storedStatus) as import('../types/site').SiteStatus;
       setStatus(status);
       if (status.turnstile_check) {
         setTurnstileEnabled(true);
-        setTurnstileSiteKey(status.turnstile_site_key);
+        setTurnstileSiteKey(status.turnstile_site_key ?? '');
       }
     }
   }, []);
@@ -253,7 +252,7 @@ const PersonalSetting = () => {
                 value={inputs.wechat_verification_code}
                 onChange={handleInputChange}
               />
-              <Button color='' fluid size='large' onClick={bindWeChat}>
+              <Button fluid size='large' onClick={bindWeChat}>
                 {t('setting.personal.binding.wechat.bind')}
               </Button>
             </Form>
@@ -330,7 +329,6 @@ const PersonalSetting = () => {
                 }}
               >
                 <Button
-                  color=''
                   fluid
                   size='large'
                   onClick={bindEmail}

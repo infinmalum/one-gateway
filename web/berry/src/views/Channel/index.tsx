@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useState, useEffect } from 'react';
 import { showError, showSuccess, showInfo, loadChannelModels } from 'utils/common';
 
@@ -13,7 +12,8 @@ import ButtonGroup from '@mui/material/ButtonGroup';
 import Toolbar from '@mui/material/Toolbar';
 import useMediaQuery from '@mui/material/useMediaQuery';
 
-import { Button, IconButton, Card, Box, Stack, Container, Typography, Divider } from '@mui/material';
+import { Button, IconButton, Card, Box, Container, Typography, Divider } from '@mui/material';
+import Stack from 'ui-component/LegacyStack';
 import ChannelTableRow from './component/TableRow';
 import ChannelTableHead from './component/TableHead';
 import TableToolBar from 'ui-component/TableToolBar';

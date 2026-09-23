@@ -1,5 +1,4 @@
-// @ts-nocheck
-import { createTheme } from '@mui/material/styles';
+import { createTheme, type ThemeOptions, type Components, type Theme } from '@mui/material/styles';
 
 // assets
 import colors from 'assets/scss/_themes-vars.module.scss';
@@ -38,8 +37,8 @@ export const theme = (customization) => {
     typography: themeTypography(themeOption)
   };
 
-  const themes = createTheme(themeOptions);
-  themes.components = componentStyleOverrides(themeOption);
+  const themes = createTheme(themeOptions as ThemeOptions);
+  themes.components = componentStyleOverrides(themeOption) as Components<Theme>;
 
   return themes;
 };

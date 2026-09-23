@@ -1,4 +1,4 @@
-// @ts-nocheck
+import { LegacyFormInput } from './SemiFormCompat';
 import React, { useEffect, useState } from 'react';
 import { Button, Divider, Form, Grid, Header, Modal, Message } from 'semantic-ui-react';
 import { API, removeTrailingSlash, showError } from '../helpers';
@@ -30,9 +30,9 @@ const SystemSetting = () => {
     TurnstileSecretKey: '',
     RegisterEnabled: '',
     EmailDomainRestrictionEnabled: '',
-    EmailDomainWhitelist: ''
+    EmailDomainWhitelist: [] as string[]
   });
-  const [originInputs, setOriginInputs] = useState({});
+  const [originInputs, setOriginInputs] = useState<Record<string, string>>({});
   let [loading, setLoading] = useState(false);
   const [EmailDomainWhitelist, setEmailDomainWhitelist] = useState([]);
   const [restrictedDomainInput, setRestrictedDomainInput] = useState('');
@@ -42,17 +42,18 @@ const SystemSetting = () => {
     const res = await API.get('/api/option/');
     const { success, message, data } = res.data;
     if (success) {
-      let newInputs = {};
+      const newInputs: Record<string, string> = {};
       data.forEach((item) => {
         newInputs[item.key] = item.value;
       });
       setInputs({
+        ...inputs,
         ...newInputs,
-        EmailDomainWhitelist: newInputs.EmailDomainWhitelist.split(',')
+        EmailDomainWhitelist: (newInputs.EmailDomainWhitelist ?? '').split(',')
       });
       setOriginInputs(newInputs);
 
-      setEmailDomainWhitelist(newInputs.EmailDomainWhitelist.split(',').map((item) => {
+      setEmailDomainWhitelist((newInputs.EmailDomainWhitelist ?? '').split(',').map((item) => {
         return { key: item, text: item, value: item };
       }));
     } else {
@@ -247,7 +248,7 @@ const SystemSetting = () => {
         <Form loading={loading}>
           <Header as='h3'>通用设置</Header>
           <Form.Group widths='equal'>
-            <Form.Input
+            <LegacyFormInput
               label='服务器地址'
               placeholder='例如：https://yourdomain.com'
               value={inputs.ServerAddress}
@@ -359,7 +360,7 @@ const SystemSetting = () => {
               autoComplete='new-password'
               options={EmailDomainWhitelist}
             />
-            <Form.Input
+            <LegacyFormInput
               label='添加新的允许的邮箱域名'
               action={
                 <Button type='button' onClick={() => {
@@ -386,7 +387,7 @@ const SystemSetting = () => {
             <Header.Subheader>用以支持系统的邮件发送</Header.Subheader>
           </Header>
           <Form.Group widths={3}>
-            <Form.Input
+            <LegacyFormInput
               label='SMTP 服务器地址'
               name='SMTPServer'
               onChange={handleInputChange}
@@ -394,7 +395,7 @@ const SystemSetting = () => {
               value={inputs.SMTPServer}
               placeholder='例如：smtp.qq.com'
             />
-            <Form.Input
+            <LegacyFormInput
               label='SMTP 端口'
               name='SMTPPort'
               onChange={handleInputChange}
@@ -402,7 +403,7 @@ const SystemSetting = () => {
               value={inputs.SMTPPort}
               placeholder='默认: 587'
             />
-            <Form.Input
+            <LegacyFormInput
               label='SMTP 账户'
               name='SMTPAccount'
               onChange={handleInputChange}
@@ -412,7 +413,7 @@ const SystemSetting = () => {
             />
           </Form.Group>
           <Form.Group widths={3}>
-            <Form.Input
+            <LegacyFormInput
               label='SMTP 发送者邮箱'
               name='SMTPFrom'
               onChange={handleInputChange}
@@ -420,7 +421,7 @@ const SystemSetting = () => {
               value={inputs.SMTPFrom}
               placeholder='通常和邮箱地址保持一致'
             />
-            <Form.Input
+            <LegacyFormInput
               label='SMTP 访问凭证'
               name='SMTPToken'
               onChange={handleInputChange}
@@ -448,7 +449,7 @@ const SystemSetting = () => {
             <code>{`${inputs.ServerAddress}/oauth/github`}</code>
           </Message>
           <Form.Group widths={3}>
-            <Form.Input
+            <LegacyFormInput
               label='GitHub Client ID'
               name='GitHubClientId'
               onChange={handleInputChange}
@@ -456,7 +457,7 @@ const SystemSetting = () => {
               value={inputs.GitHubClientId}
               placeholder='输入你注册的 GitHub OAuth APP 的 ID'
             />
-            <Form.Input
+            <LegacyFormInput
               label='GitHub Client Secret'
               name='GitHubClientSecret'
               onChange={handleInputChange}
@@ -484,7 +485,7 @@ const SystemSetting = () => {
             </Header.Subheader>
           </Header>
           <Form.Group widths={3}>
-            <Form.Input
+            <LegacyFormInput
               label='WeChat Server 服务器地址'
               name='WeChatServerAddress'
               placeholder='例如：https://yourdomain.com'
@@ -492,7 +493,7 @@ const SystemSetting = () => {
               autoComplete='new-password'
               value={inputs.WeChatServerAddress}
             />
-            <Form.Input
+            <LegacyFormInput
               label='WeChat Server 访问凭证'
               name='WeChatServerToken'
               type='password'
@@ -501,7 +502,7 @@ const SystemSetting = () => {
               value={inputs.WeChatServerToken}
               placeholder='敏感信息不会发送到前端显示'
             />
-            <Form.Input
+            <LegacyFormInput
               label='微信公众号二维码图片链接'
               name='WeChatAccountQRCodeImageURL'
               onChange={handleInputChange}
@@ -528,7 +529,7 @@ const SystemSetting = () => {
             </Header.Subheader>
           </Header>
           <Form.Group widths={3}>
-            <Form.Input
+            <LegacyFormInput
               label='Message Pusher 推送地址'
               name='MessagePusherAddress'
               placeholder='例如：https://msgpusher.com/push/your_username'
@@ -536,7 +537,7 @@ const SystemSetting = () => {
               autoComplete='new-password'
               value={inputs.MessagePusherAddress}
             />
-            <Form.Input
+            <LegacyFormInput
               label='Message Pusher 访问凭证'
               name='MessagePusherToken'
               type='password'
@@ -561,7 +562,7 @@ const SystemSetting = () => {
             </Header.Subheader>
           </Header>
           <Form.Group widths={3}>
-            <Form.Input
+            <LegacyFormInput
               label='Turnstile Site Key'
               name='TurnstileSiteKey'
               onChange={handleInputChange}
@@ -569,7 +570,7 @@ const SystemSetting = () => {
               value={inputs.TurnstileSiteKey}
               placeholder='输入你注册的 Turnstile Site Key'
             />
-            <Form.Input
+            <LegacyFormInput
               label='Turnstile Secret Key'
               name='TurnstileSecretKey'
               onChange={handleInputChange}

@@ -1,4 +1,4 @@
-// @ts-nocheck
+import { LegacyFormInput } from './SemiFormCompat';
 import React, { useEffect, useState } from 'react';
 import { API, copy, showError, showSuccess, timestamp2string } from '../helpers';
 
@@ -24,7 +24,7 @@ function renderStatus(status) {
     case 3:
       return <Tag color="grey" size="large"> 已使用 </Tag>;
     default:
-      return <Tag color="black" size="large"> 未知状态 </Tag>;
+      return <Tag color="grey" size="large"> 未知状态 </Tag>;
   }
 }
 
@@ -247,7 +247,7 @@ const RedemptionsTable = () => {
   };
 
   const manageRedemption = async (id, action, record) => {
-    let data = { id };
+    const data: { id: number; status?: number } = { id };
     let res;
     switch (action) {
       case 'delete':
@@ -353,7 +353,7 @@ const RedemptionsTable = () => {
       <EditRedemption refresh={refresh} editingRedemption={editingRedemption} visiable={showEdit}
                       handleClose={closeEdit}></EditRedemption>
       <Form onSubmit={searchRedemptions}>
-        <Form.Input
+        <LegacyFormInput
           label="搜索关键字"
           field="keyword"
           icon="search"

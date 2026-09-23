@@ -1,7 +1,6 @@
-// @ts-nocheck
 import { useState, useRef, useEffect } from 'react';
 
-import { useSelector } from 'react-redux';
+import { useAppSelector as useSelector } from 'store/hooks';
 import { useNavigate } from 'react-router-dom';
 // material-ui
 import { useTheme } from '@mui/material/styles';

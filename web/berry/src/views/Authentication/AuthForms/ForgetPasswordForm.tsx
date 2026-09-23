@@ -1,6 +1,5 @@
-// @ts-nocheck
 import { useState, useEffect } from "react";
-import { useSelector } from "react-redux";
+import { useAppSelector as useSelector } from 'store/hooks';
 import Turnstile from "react-turnstile";
 import { API } from "utils/api";
 
@@ -85,7 +84,7 @@ const ForgetPasswordForm = ({ ...others }) => {
   return (
     <>
       {sendEmail ? (
-        <Typography variant="h3" padding={"20px"}>
+        <Typography variant="h3" sx={{ p: '20px' }}>
           重置邮件发送成功，请检查邮箱！
         </Typography>
       ) : (
@@ -133,7 +132,7 @@ const ForgetPasswordForm = ({ ...others }) => {
                     error
                     id="standard-weight-helper-text--register"
                   >
-                    {errors.email}
+                    {typeof errors.email === 'string' ? errors.email : ''}
                   </FormHelperText>
                 )}
               </FormControl>

@@ -1,5 +1,5 @@
-// @ts-nocheck
-import { Stack, Typography, Container, Box, OutlinedInput, InputAdornment, Button } from '@mui/material';
+import { Typography, Container, Box, OutlinedInput, InputAdornment, Button } from '@mui/material';
+import Stack from 'ui-component/LegacyStack';
 import { useTheme } from '@mui/material/styles';
 import SubCard from 'ui-component/cards/SubCard';
 import inviteImage from 'assets/images/invite/cwok_casual_19.webp';
@@ -49,7 +49,7 @@ const InviteCard = () => {
           <Typography variant="h3" sx={{ color: theme.palette.primary.dark }}>
             邀请奖励
           </Typography>
-          <Typography variant="body" sx={{ color: theme.palette.primary.dark }}>
+          <Typography variant="body1" sx={{ color: theme.palette.primary.dark }}>
             分享您的邀请链接，邀请好友注册，即可获得奖励！
           </Typography>
 

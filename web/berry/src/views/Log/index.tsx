@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useState, useEffect } from 'react';
 import { showError } from 'utils/common';
 
@@ -11,7 +10,8 @@ import LinearProgress from '@mui/material/LinearProgress';
 import ButtonGroup from '@mui/material/ButtonGroup';
 import Toolbar from '@mui/material/Toolbar';
 
-import { Button, Card, Stack, Container, Typography, Box } from '@mui/material';
+import { Button, Card, Container, Typography, Box } from '@mui/material';
+import Stack from 'ui-component/LegacyStack';
 import LogTableRow from './component/TableRow';
 import LogTableHead from './component/TableHead';
 import TableToolBar from './component/TableToolBar';

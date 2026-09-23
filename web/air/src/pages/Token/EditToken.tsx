@@ -1,4 +1,4 @@
-// @ts-nocheck
+import { LegacyInput, LegacyDatePicker } from '../../components/SemiFormCompat';
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { API, isMobile, showError, showSuccess, timestamp2string } from '../../helpers';
@@ -30,7 +30,14 @@ const EditToken = (props) => {
     model_limits_enabled: false,
     model_limits: []
   };
-  const [inputs, setInputs] = useState(originInputs);
+  const [inputs, setInputs] = useState<{
+    name: string;
+    remain_quota: number | string;
+    expired_time: number | string;
+    unlimited_quota: boolean;
+    model_limits_enabled: boolean;
+    model_limits: string[];
+  }>(originInputs);
   const { name, remain_quota, expired_time, unlimited_quota, model_limits_enabled, model_limits } = inputs;
   // const [visible, setVisible] = useState(false);
   const [models, setModels] = useState({});
@@ -136,17 +143,17 @@ const EditToken = (props) => {
     setLoading(true);
     if (isEdit) {
       // 编辑令牌的逻辑保持不变
-      let localInputs = { ...inputs };
-      localInputs.remain_quota = parseInt(localInputs.remain_quota);
-      if (localInputs.expired_time !== -1) {
-        let time = Date.parse(localInputs.expired_time);
+      let expiredTime = -1;
+      if (inputs.expired_time !== -1) {
+        const time = Date.parse(String(inputs.expired_time));
         if (isNaN(time)) {
           showError('过期时间格式错误！');
           setLoading(false);
           return;
         }
-        localInputs.expired_time = Math.ceil(time / 1000);
+        expiredTime = Math.ceil(time / 1000);
       }
+      const localInputs = { ...inputs, remain_quota: Number(inputs.remain_quota), expired_time: expiredTime };
       // localInputs.model_limits = localInputs.model_limits.join(',');
       let res = await API.put(`/api/token/`, { ...localInputs, id: parseInt(props.editingToken.id) });
       const { success, message } = res.data;
@@ -166,19 +173,18 @@ const EditToken = (props) => {
           // 如果用户想要创建多个令牌，则给每个令牌一个序号后缀
           localInputs.name = `${inputs.name}-${generateRandomSuffix()}`;
         }
-        localInputs.remain_quota = parseInt(localInputs.remain_quota);
-
+        let expiredTime = -1;
         if (localInputs.expired_time !== -1) {
-          let time = Date.parse(localInputs.expired_time);
+          const time = Date.parse(String(localInputs.expired_time));
           if (isNaN(time)) {
             showError('过期时间格式错误！');
             setLoading(false);
             break;
           }
-          localInputs.expired_time = Math.ceil(time / 1000);
+          expiredTime = Math.ceil(time / 1000);
         }
         // localInputs.model_limits = localInputs.model_limits.join(',');
-        let res = await API.post(`/api/token/`, localInputs);
+        let res = await API.post(`/api/token/`, { ...localInputs, remain_quota: Number(localInputs.remain_quota), expired_time: expiredTime });
         const { success, message } = res.data;
 
         if (success) {
@@ -205,7 +211,7 @@ const EditToken = (props) => {
     <>
       <SideSheet
         placement={isEdit ? 'right' : 'left'}
-        title={<Title level={3}>{isEdit ? '更新令牌信息' : '创建新的令牌'}</Title>}
+        title={<Title heading={3}>{isEdit ? '更新令牌信息' : '创建新的令牌'}</Title>}
         headerStyle={{ borderBottom: '1px solid var(--semi-color-border)' }}
         bodyStyle={{ borderBottom: '1px solid var(--semi-color-border)' }}
         visible={props.visiable}
@@ -222,7 +228,7 @@ const EditToken = (props) => {
         width={isMobile() ? '100%' : 600}
       >
         <Spin spinning={loading}>
-          <Input
+          <LegacyInput
             style={{ marginTop: 20 }}
             label="名称"
             name="name"
@@ -233,13 +239,12 @@ const EditToken = (props) => {
             required={!isEdit}
           />
           <Divider />
-          <DatePicker
+          <LegacyDatePicker
             label="过期时间"
             name="expired_time"
             placeholder={'请选择过期时间'}
             onChange={(value) => handleInputChange('expired_time', value)}
             value={expired_time}
-            autoComplete="new-password"
             type="dateTime"
           />
           <div style={{ marginTop: 20 }}>

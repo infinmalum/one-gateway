@@ -1,4 +1,3 @@
-// @ts-nocheck
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -34,7 +33,14 @@ const EditToken = () => {
     models: [],
     subnet: '',
   };
-  const [inputs, setInputs] = useState(originInputs);
+  const [inputs, setInputs] = useState<{
+    name: string;
+    remain_quota: number | string;
+    expired_time: number | string;
+    unlimited_quota: boolean;
+    models: string[];
+    subnet: string;
+  }>(originInputs);
   const { name, remain_quota, expired_time, unlimited_quota } = inputs;
   const navigate = useNavigate();
   const handleInputChange = (e, { name, value }) => {
@@ -120,17 +126,21 @@ const EditToken = () => {
 
   const submit = async () => {
     if (!isEdit && inputs.name === '') return;
-    let localInputs = inputs;
-    localInputs.remain_quota = parseInt(localInputs.remain_quota);
-    if (localInputs.expired_time !== -1) {
-      let time = Date.parse(localInputs.expired_time);
+    let expiredTime = -1;
+    if (inputs.expired_time !== -1) {
+      const time = Date.parse(String(inputs.expired_time));
       if (isNaN(time)) {
         showError(t('token.edit.messages.expire_time_invalid'));
         return;
       }
-      localInputs.expired_time = Math.ceil(time / 1000);
+      expiredTime = Math.ceil(time / 1000);
     }
-    localInputs.models = localInputs.models.join(',');
+    const localInputs = {
+      ...inputs,
+      remain_quota: Number(inputs.remain_quota),
+      expired_time: expiredTime,
+      models: inputs.models.join(','),
+    };
     let res;
     if (isEdit) {
       res = await API.put(`/api/token/`, {

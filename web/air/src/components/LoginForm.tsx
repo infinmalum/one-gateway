@@ -1,4 +1,4 @@
-// @ts-nocheck
+import { LegacyFormInput } from './SemiFormCompat';
 import React, { useContext, useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { UserContext } from '../context/User';
@@ -27,20 +27,20 @@ const LoginForm = () => {
   const [turnstileSiteKey, setTurnstileSiteKey] = useState('');
   const [turnstileToken, setTurnstileToken] = useState('');
   let navigate = useNavigate();
-  const [status, setStatus] = useState({});
+  const [status, setStatus] = useState<import('../types/site').SiteStatus>({});
   const logo = getLogo();
 
   useEffect(() => {
     if (searchParams.get('expired')) {
       showError('未登录或登录已过期，请重新登录！');
     }
-    let status = localStorage.getItem('status');
-    if (status) {
-      status = JSON.parse(status);
+    const storedStatus = localStorage.getItem('status');
+    if (storedStatus) {
+      const status = JSON.parse(storedStatus) as import('../types/site').SiteStatus;
       setStatus(status);
       if (status.turnstile_check) {
         setTurnstileEnabled(true);
-        setTurnstileSiteKey(status.turnstile_site_key);
+        setTurnstileSiteKey(status.turnstile_site_key ?? '');
       }
     }
   }, []);
@@ -137,14 +137,14 @@ const LoginForm = () => {
                   用户登录
                 </Title>
                 <Form>
-                  <Form.Input
+                  <LegacyFormInput
                     field={'username'}
                     label={'用户名'}
                     placeholder="用户名"
                     name="username"
                     onChange={(value) => handleChange('username', value)}
                   />
-                  <Form.Input
+                  <LegacyFormInput
                     field={'password'}
                     label={'密码'}
                     placeholder="密码"
@@ -212,7 +212,7 @@ const LoginForm = () => {
                   size={'small'}
                   centered={true}
                 >
-                  <div style={{ display: 'flex', alignItem: 'center', flexDirection: 'column' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', flexDirection: 'column' }}>
                     <img src={status.wechat_qrcode} />
                   </div>
                   <div style={{ textAlign: 'center' }}>
@@ -221,7 +221,7 @@ const LoginForm = () => {
                     </p>
                   </div>
                   <Form size="large">
-                    <Form.Input
+                    <LegacyFormInput
                       field={'wechat_verification_code'}
                       placeholder="验证码"
                       label={'验证码'}

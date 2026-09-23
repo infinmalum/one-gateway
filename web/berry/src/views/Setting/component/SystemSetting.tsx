@@ -1,23 +1,7 @@
-// @ts-nocheck
 import { useState, useEffect } from 'react';
 import SubCard from 'ui-component/cards/SubCard';
-import {
-  Stack,
-  FormControl,
-  InputLabel,
-  OutlinedInput,
-  Checkbox,
-  Button,
-  FormControlLabel,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Divider,
-  Alert,
-  Autocomplete,
-  TextField
-} from '@mui/material';
+import { FormControl, InputLabel, OutlinedInput, Checkbox, Button, FormControlLabel, Dialog, DialogTitle, DialogContent, DialogActions, Divider, Alert, Autocomplete, TextField } from '@mui/material';
+import Stack from 'ui-component/LegacyStack';
 import Grid from 'ui-component/LegacyGrid';
 import { showError, showSuccess, removeTrailingSlash } from 'utils/common'; //,
 import { API } from 'utils/api';
@@ -71,17 +55,18 @@ const SystemSetting = () => {
     const res = await API.get('/api/option/');
     const { success, message, data } = res.data;
     if (success) {
-      let newInputs = {};
+      const newInputs: Record<string, string> = {};
       data.forEach((item) => {
         newInputs[item.key] = item.value;
       });
-      setInputs({
+      setInputs((current) => ({
+        ...current,
         ...newInputs,
-        EmailDomainWhitelist: newInputs.EmailDomainWhitelist.split(',')
-      });
+        EmailDomainWhitelist: (newInputs.EmailDomainWhitelist ?? '').split(',')
+      }));
       setOriginInputs(newInputs);
 
-      setEmailDomainWhitelist(newInputs.EmailDomainWhitelist.split(','));
+      setEmailDomainWhitelist((newInputs.EmailDomainWhitelist ?? '').split(','));
     } else {
       showError(message);
     }

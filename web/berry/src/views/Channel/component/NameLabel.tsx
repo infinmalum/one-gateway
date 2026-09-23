@@ -1,6 +1,6 @@
-// @ts-nocheck
 import PropTypes from 'prop-types';
-import { Tooltip, Stack, Container } from '@mui/material';
+import { Tooltip, Container } from '@mui/material';
+import Stack from 'ui-component/LegacyStack';
 import Label from 'ui-component/Label';
 import { styled } from '@mui/material/styles';
 import { showSuccess, copy } from 'utils/common';

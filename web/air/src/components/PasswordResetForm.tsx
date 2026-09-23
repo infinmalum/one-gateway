@@ -1,3 +1,4 @@
+import { LegacyFormInput } from './SemiFormCompat';
 import React, { useEffect, useState } from 'react';
 import { Button, Form, Grid, Header, Image, Segment } from 'semantic-ui-react';
 import { API, showError, showInfo, showSuccess } from '../helpers';
@@ -63,7 +64,7 @@ const PasswordResetForm = () => {
         </Header>
         <Form size="large">
           <Segment>
-            <Form.Input
+            <LegacyFormInput
               fluid
               icon="mail"
               iconPosition="left"

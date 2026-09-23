@@ -1,4 +1,3 @@
-// @ts-nocheck
 import React, { useContext, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { UserContext } from '../context/User';
@@ -24,9 +23,10 @@ let headerButtons = [
 
 if (localStorage.getItem('chat_link')) {
   headerButtons.splice(1, 0, {
-    name: '聊天',
+    text: '聊天',
+    itemKey: 'chat',
     to: '/chat',
-    icon: 'comments'
+    icon: <span aria-hidden="true">💬</span>
   });
 }
 
@@ -137,7 +137,7 @@ const HeaderBar = () => {
                         </Dropdown.Menu>
                       }
                     >
-                      <Avatar size="small" color={stringToColor(userState.user.username)} style={{ margin: 4 }}>
+                      <Avatar size="small" style={{ margin: 4, backgroundColor: stringToColor(userState.user.username) }}>
                         {userState.user.username[0]}
                       </Avatar>
                       <span>{userState.user.username}</span>

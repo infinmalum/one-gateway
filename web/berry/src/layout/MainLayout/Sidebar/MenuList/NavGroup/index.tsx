@@ -1,4 +1,3 @@
-// @ts-nocheck
 import PropTypes from 'prop-types';
 
 // material-ui
@@ -35,10 +34,10 @@ const NavGroup = ({ item }) => {
       <List
         subheader={
           item.title && (
-            <Typography variant="caption" sx={{ ...theme.typography.menuCaption }} display="block" gutterBottom>
+            <Typography variant="caption" sx={{ ...theme.typography.menuCaption }}  gutterBottom>
               {item.title}
               {item.caption && (
-                <Typography variant="caption" sx={{ ...theme.typography.subMenuCaption }} display="block" gutterBottom>
+                <Typography variant="caption" sx={{ ...theme.typography.subMenuCaption }}  gutterBottom>
                   {item.caption}
                 </Typography>
               )}

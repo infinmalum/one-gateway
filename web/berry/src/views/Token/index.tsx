@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useState, useEffect } from 'react';
 import { showError, showSuccess } from 'utils/common';
 
@@ -12,7 +11,8 @@ import Alert from '@mui/material/Alert';
 import ButtonGroup from '@mui/material/ButtonGroup';
 import Toolbar from '@mui/material/Toolbar';
 
-import { Button, Card, Box, Stack, Container, Typography } from '@mui/material';
+import { Button, Card, Box, Container, Typography } from '@mui/material';
+import Stack from 'ui-component/LegacyStack';
 import TokensTableRow from './component/TableRow';
 import TokenTableHead from './component/TableHead';
 import TableToolBar from 'ui-component/TableToolBar';
@@ -20,7 +20,7 @@ import { API } from 'utils/api';
 import { ITEMS_PER_PAGE } from 'constants';
 import { IconRefresh, IconPlus } from '@tabler/icons-react';
 import EditeModal from './component/EditModal';
-import { useSelector } from 'react-redux';
+import { useAppSelector as useSelector } from 'store/hooks';
 
 export default function Token() {
   const [tokens, setTokens] = useState([]);

@@ -1,8 +1,7 @@
-// @ts-nocheck
+import Stack from 'ui-component/LegacyStack';
 import { useState, useEffect } from "react";
 import SubCard from "ui-component/cards/SubCard";
 import {
-  Stack,
   FormControl,
   InputLabel,
   OutlinedInput,
@@ -62,7 +61,7 @@ const OperationSetting = () => {
         }
         newInputs[item.key] = item.value;
       });
-      setInputs(newInputs);
+      setInputs((current) => ({ ...current, ...newInputs }));
       setOriginInputs(newInputs);
     } else {
       showError(message);
@@ -323,7 +322,6 @@ const OperationSetting = () => {
             >
               <DateTimePicker
                 label="日志清理时间"
-                placeholder="日志清理时间"
                 ampm={false}
                 name="historyTimestamp"
                 value={
