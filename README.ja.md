@@ -136,7 +136,7 @@ sudo service nginx restart
 
    # フロントエンドのビルド
    cd one-api/web/default
-   npm install
+   npm ci --legacy-peer-deps
    npm run build
 
    # バックエンドのビルド

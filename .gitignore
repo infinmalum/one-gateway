@@ -12,4 +12,5 @@ cmd.md
 .env
 /one-api
 temp
+.cache/
 .DS_Store

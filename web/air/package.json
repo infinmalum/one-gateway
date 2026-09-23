@@ -3,38 +3,30 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
-    "@douyinfe/semi-icons": "^2.46.1",
-    "@douyinfe/semi-ui": "^2.46.1",
-    "@visactor/react-vchart": "~1.8.8",
-    "@visactor/vchart": "~1.8.8",
-    "@visactor/vchart-semi-theme": "~1.8.8",
-    "axios": "^0.27.2",
+    "@douyinfe/semi-icons": "^2.103.0",
+    "@douyinfe/semi-ui": "^2.103.0",
+    "@visactor/react-vchart": "~2.1.7",
+    "@visactor/vchart": "~2.1.7",
+    "@visactor/vchart-semi-theme": "~1.13.1",
+    "axios": "^1.20.0",
     "history": "^5.3.0",
-    "marked": "^4.1.1",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "react-dropzone": "^14.2.3",
+    "marked": "^18.0.14",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-dropzone": "^20.1.2",
     "react-fireworks": "^1.0.4",
-    "react-router-dom": "^6.3.0",
-    "react-scripts": "5.0.1",
+    "react-router-dom": "^7.18.4",
     "react-telegram-login": "^1.1.2",
-    "react-toastify": "^9.0.8",
-    "react-turnstile": "^1.0.5",
+    "react-toastify": "^11.1.0",
+    "react-turnstile": "^1.1.5",
     "semantic-ui-css": "^2.5.0",
-    "semantic-ui-react": "^2.1.3",
-    "usehooks-ts": "^2.9.1"
+    "semantic-ui-react": "^2.1.5",
+    "usehooks-ts": "^3.1.1"
   },
   "scripts": {
-    "start": "react-scripts start",
-    "build": "react-scripts build && mv -f build ../build/air",
-    "test": "react-scripts test",
-    "eject": "react-scripts eject"
-  },
-  "eslintConfig": {
-    "extends": [
-      "react-app",
-      "react-app/jest"
-    ]
+    "start": "vite --host",
+    "build": "npm run typecheck && vite build",
+    "typecheck": "tsc --noEmit"
   },
   "browserslist": {
     "production": [
@@ -49,12 +41,15 @@
     ]
   },
   "devDependencies": {
-    "prettier": "2.8.8",
-    "typescript": "4.4.2"
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.3.7",
+    "@vitejs/plugin-react": "^6.1.1",
+    "prettier": "3.9.9",
+    "typescript": "7.0.2",
+    "vite": "^8.3.0"
   },
   "prettier": {
     "singleQuote": true,
     "jsxSingleQuote": true
-  },
-  "proxy": "http://localhost:3000"
+  }
 }

@@ -11,7 +11,7 @@
 
 1. 在 `web` 文件夹下新建一个文件夹，文件夹名为主题名。
 2. 把你的主题文件放到这个文件夹下。
-3. 修改你的 `package.json` 文件，把 `build` 命令改为：`"build": "react-scripts build && mv -f build ../build/default"`，其中 `default` 为你的主题名。
+3. 用 Vite 构建主题，并将输出目录设为 `../build/<主题名>`；`build` 命令使用 `vite build`。
 4. 修改 `common/config/config.go` 中的 `ValidThemes`，把你的主题名称注册进去。
 5. 修改 `web/THEMES` 文件，这里也需要同步修改。
 

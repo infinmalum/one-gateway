@@ -15,8 +15,29 @@ on:
   push:
     branches:
       - 'main'
+  pull_request:
+    branches:
+      - 'main'
 
 jobs:
+  web_build:
+    name: "Build ${{ matrix.theme }} theme"
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        theme: [default, air, berry]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/${{ matrix.theme }}/package-lock.json
+      - run: npm ci --legacy-peer-deps
+        working-directory: web/${{ matrix.theme }}
+      - run: npm run build
+        working-directory: web/${{ matrix.theme }}
+
   unit_tests:
     name: "Unit tests"
     runs-on: ubuntu-latest
@@ -27,7 +48,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v4
         with:
-          go-version: ^1.22
+          go-version: '1.27.1'
 
       # When you execute your unit tests, make sure to use the "-coverprofile" flag to write a
       # coverage profile to a file. You will need the name of the file (e.g. "coverage.txt")

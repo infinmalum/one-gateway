@@ -203,7 +203,7 @@ docker-compose ps
 
    # 构建前端
    cd one-api/web/default
-   npm install
+   npm ci --legacy-peer-deps
    npm run build
 
    # 构建后端
