@@ -15,18 +15,18 @@ const Footer = () => {
           <div className="custom-footer" dangerouslySetInnerHTML={{ __html: siteInfo.footer_html }}></div>
         ) : (
           <>
-            <Link href="https://github.com/songquanpeng/one-api" target="_blank">
+            <Link href="https://github.com/infinmalum/one-gateway" target="_blank">
               {siteInfo.system_name} {import.meta.env.REACT_APP_VERSION}{' '}
             </Link>
-            由{' '}
-            <Link href="https://github.com/songquanpeng" target="_blank">
-              JustSong
+            基于{' '}
+            <Link href="https://github.com/songquanpeng/one-api" target="_blank">
+              One API（JustSong）
             </Link>{' '}
-            构建，主题 berry 来自{' '}
+            ，主题 berry 来自{' '}
             <Link href="https://github.com/MartialBE" target="_blank">
               MartialBE
-            </Link>{' '}，源代码遵循
-            <Link href="https://opensource.org/licenses/mit-license.php"> MIT 协议</Link>
+            </Link>{' '}；原项目采用 MIT，派生修改采用
+            <Link href="https://github.com/infinmalum/one-gateway/blob/main/LICENSE"> Apache 2.0</Link>
           </>
         )}
       </Box>

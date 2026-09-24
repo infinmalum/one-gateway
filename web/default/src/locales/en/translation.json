@@ -728,10 +728,10 @@
     }
   },
   "footer": {
-    "built_by": "built by",
-    "built_by_name": "JustSong",
-    "license": ", source code is licensed under the",
-    "mit": "MIT License"
+    "built_by": "based on",
+    "built_by_name": "One API",
+    "license": "by JustSong; upstream MIT, fork changes under",
+    "apache": "Apache 2.0"
   },
   "home": {
     "welcome": {

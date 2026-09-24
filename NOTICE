@@ -1,0 +1,14 @@
+One Gateway
+
+This repository is a fork of One API by JustSong and other contributors:
+https://github.com/songquanpeng/one-api
+
+The original One API code and documentation remain subject to their MIT
+License and copyright notice. The original license is preserved in
+LICENSE.upstream. The fork's original modifications are offered under the
+Apache License, Version 2.0, whose text is in LICENSE. These notices do not
+replace license notices carried by individual source files or dependencies.
+
+Some source files contain material from other projects with their own notices,
+including the Minimal UI attribution in web/berry. Keep those notices with
+the corresponding files when redistributing them.

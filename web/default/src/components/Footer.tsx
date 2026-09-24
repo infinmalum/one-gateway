@@ -38,16 +38,16 @@ const Footer = () => {
           ></div>
         ) : (
           <div className='custom-footer'>
-            <a href='https://github.com/songquanpeng/one-api' target='_blank'>
+            <a href='https://github.com/infinmalum/one-gateway' target='_blank'>
               {systemName} {import.meta.env.REACT_APP_VERSION}{' '}
             </a>
             {t('footer.built_by')}{' '}
-            <a href='https://github.com/songquanpeng' target='_blank'>
+            <a href='https://github.com/songquanpeng/one-api' target='_blank'>
               {t('footer.built_by_name')}
             </a>{' '}
             {t('footer.license')}{' '}
-            <a href='https://opensource.org/licenses/mit-license.php'>
-              {t('footer.mit')}
+            <a href='https://github.com/infinmalum/one-gateway/blob/main/LICENSE'>
+              {t('footer.apache')}
             </a>
           </div>
         )}

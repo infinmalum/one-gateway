@@ -730,10 +730,10 @@
     "loading_failed": "加载失败"
   },
   "footer": {
-    "built_by": "由",
-    "built_by_name": "JustSong",
-    "license": "构建，源代码遵循",
-    "mit": "MIT 协议"
+    "built_by": "基于",
+    "built_by_name": "One API",
+    "license": "（JustSong）；原项目采用 MIT，派生修改采用",
+    "apache": "Apache 2.0"
   },
   "home": {
     "welcome": {
