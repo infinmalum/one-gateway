@@ -1,9 +1,12 @@
 package model
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
+	"github.com/songquanpeng/one-api/common"
 	"github.com/songquanpeng/one-api/common/config"
 	"github.com/songquanpeng/one-api/common/helper"
 	"github.com/songquanpeng/one-api/common/logger"
@@ -94,6 +97,11 @@ func BatchInsertChannels(channels []Channel) error {
 			return err
 		}
 	}
+	groups := make([]string, 0, len(channels))
+	for _, channel := range channels {
+		groups = append(groups, channel.Group)
+	}
+	refreshChannelCache(groups...)
 	return nil
 }
 
@@ -131,10 +139,15 @@ func (channel *Channel) Insert() error {
 		return err
 	}
 	err = channel.AddAbilities()
+	if err == nil {
+		refreshChannelCache(channel.Group)
+	}
 	return err
 }
 
 func (channel *Channel) Update() error {
+	var previousGroup string
+	DB.Model(&Channel{}).Where("id = ?", channel.Id).Pluck("group", &previousGroup)
 	var err error
 	err = DB.Model(channel).Updates(channel).Error
 	if err != nil {
@@ -142,6 +155,9 @@ func (channel *Channel) Update() error {
 	}
 	DB.Model(channel).First(channel, "id = ?", channel.Id)
 	err = channel.UpdateAbilities()
+	if err == nil {
+		refreshChannelCache(previousGroup, channel.Group)
+	}
 	return err
 }
 
@@ -166,12 +182,17 @@ func (channel *Channel) UpdateBalance(balance float64) {
 }
 
 func (channel *Channel) Delete() error {
+	var previousGroup string
+	DB.Model(&Channel{}).Where("id = ?", channel.Id).Pluck("group", &previousGroup)
 	var err error
 	err = DB.Delete(channel).Error
 	if err != nil {
 		return err
 	}
 	err = channel.DeleteAbilities()
+	if err == nil {
+		refreshChannelCache(previousGroup)
+	}
 	return err
 }
 
@@ -188,6 +209,8 @@ func (channel *Channel) LoadConfig() (ChannelConfig, error) {
 }
 
 func UpdateChannelStatusById(id int, status int) {
+	var group string
+	DB.Model(&Channel{}).Where("id = ?", id).Pluck("group", &group)
 	err := UpdateAbilityStatus(id, status == ChannelStatusEnabled)
 	if err != nil {
 		logger.SysError("failed to update ability status: " + err.Error())
@@ -195,6 +218,8 @@ func UpdateChannelStatusById(id int, status int) {
 	err = DB.Model(&Channel{}).Where("id = ?", id).Update("status", status).Error
 	if err != nil {
 		logger.SysError("failed to update channel status: " + err.Error())
+	} else {
+		refreshChannelCache(group)
 	}
 }
 
@@ -214,11 +239,45 @@ func updateChannelUsedQuota(id int, quota int64) {
 }
 
 func DeleteChannelByStatus(status int64) (int64, error) {
+	var groups []string
+	DB.Model(&Channel{}).Where("status = ?", status).Pluck("group", &groups)
 	result := DB.Where("status = ?", status).Delete(&Channel{})
+	if result.Error == nil && result.RowsAffected > 0 {
+		refreshChannelCache(groups...)
+	}
 	return result.RowsAffected, result.Error
 }
 
 func DeleteDisabledChannel() (int64, error) {
+	var groups []string
+	DB.Model(&Channel{}).Where("status = ? or status = ?", ChannelStatusAutoDisabled, ChannelStatusManuallyDisabled).Pluck("group", &groups)
 	result := DB.Where("status = ? or status = ?", ChannelStatusAutoDisabled, ChannelStatusManuallyDisabled).Delete(&Channel{})
+	if result.Error == nil && result.RowsAffected > 0 {
+		refreshChannelCache(groups...)
+	}
 	return result.RowsAffected, result.Error
+}
+
+func refreshChannelCache(groups ...string) {
+	if common.RedisEnabled {
+		seen := make(map[string]bool)
+		for _, combinedGroups := range groups {
+			for _, group := range strings.Split(combinedGroups, ",") {
+				group = strings.TrimSpace(group)
+				if group == "" || seen[group] {
+					continue
+				}
+				seen[group] = true
+				if err := common.RedisDel("group_models:" + group); err != nil {
+					logger.SysError("failed to invalidate group models: " + err.Error())
+				}
+			}
+		}
+		if err := common.RDB.Incr(context.Background(), "channel_cache_version").Err(); err != nil {
+			logger.SysError("failed to publish channel cache version: " + err.Error())
+		}
+	}
+	if config.MemoryCacheEnabled {
+		InitChannelCache()
+	}
 }
