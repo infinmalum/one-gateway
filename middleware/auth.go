@@ -94,9 +94,18 @@ func TokenAuth() func(c *gin.Context) {
 		key := c.Request.Header.Get("Authorization")
 		key = strings.TrimPrefix(key, "Bearer ")
 		key = strings.TrimPrefix(key, "sk-")
-		parts := strings.Split(key, "-")
-		key = parts[0]
 		token, err := model.ValidateUserToken(key)
+		var channelFromToken string
+		if err != nil {
+			// Legacy administrator tokens may have a channel ID appended. Try the
+			// complete key first so hyphens in real tokens remain valid.
+			if split := strings.LastIndexByte(key, '-'); split >= 0 {
+				if candidate, candidateErr := model.ValidateUserToken(key[:split]); candidateErr == nil {
+					token, err = candidate, nil
+					channelFromToken = key[split+1:]
+				}
+			}
+		}
 		if err != nil {
 			abortWithMessage(c, http.StatusUnauthorized, err.Error())
 			return
@@ -132,9 +141,9 @@ func TokenAuth() func(c *gin.Context) {
 		c.Set(ctxkey.Id, token.UserId)
 		c.Set(ctxkey.TokenId, token.Id)
 		c.Set(ctxkey.TokenName, token.Name)
-		if len(parts) > 1 {
+		if channelFromToken != "" {
 			if model.IsAdmin(token.UserId) {
-				c.Set(ctxkey.SpecificChannelId, parts[1])
+				c.Set(ctxkey.SpecificChannelId, channelFromToken)
 			} else {
 				abortWithMessage(c, http.StatusForbidden, "普通用户不支持指定渠道")
 				return
@@ -143,6 +152,10 @@ func TokenAuth() func(c *gin.Context) {
 
 		// set channel id for proxy relay
 		if channelId := c.Param("channelid"); channelId != "" {
+			if !model.IsAdmin(token.UserId) {
+				abortWithMessage(c, http.StatusForbidden, "普通用户不支持指定渠道")
+				return
+			}
 			c.Set(ctxkey.SpecificChannelId, channelId)
 		}
 

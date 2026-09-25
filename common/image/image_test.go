@@ -7,11 +7,8 @@ import (
 	_ "image/gif"
 	_ "image/jpeg"
 	_ "image/png"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/songquanpeng/one-api/common/client"
@@ -38,14 +35,6 @@ func TestImageFormats(t *testing.T) {
 			data, err := os.ReadFile(filepath.Join("testdata", "sample."+format.extension))
 			require.NoError(t, err)
 
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.Header().Set("Content-Type", format.contentType)
-				if r.Method != http.MethodHead {
-					_, _ = w.Write(data)
-				}
-			}))
-			defer server.Close()
-
 			decoded, name, err := image.Decode(bytes.NewReader(data))
 			require.NoError(t, err)
 			require.Equal(t, format.name, name)
@@ -68,10 +57,14 @@ func TestImageFormats(t *testing.T) {
 			require.Equal(t, 2, width)
 			require.Equal(t, 3, height)
 
-			width, height, err = img.GetImageSize(strings.TrimSuffix(server.URL, "/") + "/sample")
-			require.NoError(t, err)
-			require.Equal(t, 2, width)
-			require.Equal(t, 3, height)
 		})
 	}
+}
+
+func TestPrivateImageURLIsRejected(t *testing.T) {
+	client.Init()
+	_, _, err := img.GetImageFromUrl("http://127.0.0.1/private.png")
+	require.Error(t, err)
+	_, _, err = img.GetImageFromUrl("http://[::1]/private.png")
+	require.Error(t, err)
 }

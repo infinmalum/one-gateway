@@ -8,7 +8,6 @@ import (
 	_ "image/gif"
 	_ "image/jpeg"
 	_ "image/png"
-	"net/http"
 	"regexp"
 	"strings"
 	"sync"
@@ -24,6 +23,7 @@ func IsImageUrl(url string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+	defer resp.Body.Close()
 	if !strings.HasPrefix(resp.Header.Get("Content-Type"), "image/") {
 		return false, nil
 	}
@@ -61,7 +61,7 @@ func GetImageFromUrl(url string) (mimeType string, data string, err error) {
 	if !isImage {
 		return
 	}
-	resp, err := http.Get(url)
+	resp, err := client.UserContentRequestHTTPClient.Get(url)
 	if err != nil {
 		return
 	}

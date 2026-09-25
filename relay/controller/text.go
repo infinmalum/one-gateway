@@ -6,9 +6,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"reflect"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/songquanpeng/one-api/common"
 	"github.com/songquanpeng/one-api/common/config"
 	"github.com/songquanpeng/one-api/common/logger"
 	"github.com/songquanpeng/one-api/relay"
@@ -109,7 +112,47 @@ func getRequestBody(c *gin.Context, meta *meta.Meta, textRequest *model.GeneralO
 		logger.Debugf(c.Request.Context(), "converted request json_marshal_failed: %s\n", err.Error())
 		return nil, err
 	}
+	if meta.APIType == apitype.OpenAI && strings.HasPrefix(c.GetHeader("Content-Type"), "application/json") {
+		jsonData, err = preserveExtraRequestFields(c, jsonData)
+		if err != nil {
+			return nil, err
+		}
+	}
 	logger.Debugf(c.Request.Context(), "converted request: \n%s", string(jsonData))
 	requestBody = bytes.NewBuffer(jsonData)
 	return requestBody, nil
+}
+
+// OpenAI compatible providers may accept fields outside the common request
+// schema. Keep those fields when model mapping or stream conversion requires
+// the request to be serialized again.
+func preserveExtraRequestFields(c *gin.Context, converted []byte) ([]byte, error) {
+	original, err := common.GetRequestBody(c)
+	if err != nil {
+		return nil, err
+	}
+	var incoming map[string]json.RawMessage
+	if err := json.Unmarshal(original, &incoming); err != nil {
+		return nil, err
+	}
+	var outgoing map[string]json.RawMessage
+	if err := json.Unmarshal(converted, &outgoing); err != nil {
+		return nil, err
+	}
+	known := make(map[string]bool)
+	requestType := reflect.TypeOf(model.GeneralOpenAIRequest{})
+	for i := 0; i < requestType.NumField(); i++ {
+		name := strings.Split(requestType.Field(i).Tag.Get("json"), ",")[0]
+		if name != "" && name != "-" {
+			known[name] = true
+		}
+	}
+	for name, value := range incoming {
+		if !known[name] {
+			if _, exists := outgoing[name]; !exists {
+				outgoing[name] = value
+			}
+		}
+	}
+	return json.Marshal(outgoing)
 }

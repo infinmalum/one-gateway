@@ -15,6 +15,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/redis/go-redis/v9"
 )
 
 var (
@@ -169,16 +171,39 @@ func CacheGetGroupModels(ctx context.Context, group string) ([]string, error) {
 
 var group2model2channels map[string]map[string][]*Channel
 var channelSyncLock sync.RWMutex
+var channelRefreshLock sync.Mutex
+var channelCacheVersion string
+
+func currentChannelCacheVersion() (string, error) {
+	version, err := common.RedisGet("channel_cache_version")
+	if errors.Is(err, redis.Nil) {
+		return "0", nil
+	}
+	return version, err
+}
 
 func InitChannelCache() {
-	newChannelId2channel := make(map[int]*Channel)
+	channelRefreshLock.Lock()
+	defer channelRefreshLock.Unlock()
+	version := "0"
+	if common.RedisEnabled {
+		var err error
+		version, err = currentChannelCacheVersion()
+		if err != nil {
+			logger.SysError("failed to read channel cache version: " + err.Error())
+			version = ""
+		}
+	}
 	var channels []*Channel
-	DB.Where("status = ?", ChannelStatusEnabled).Find(&channels)
-	for _, channel := range channels {
-		newChannelId2channel[channel.Id] = channel
+	if err := DB.Where("status = ?", ChannelStatusEnabled).Find(&channels).Error; err != nil {
+		logger.SysError("failed to reload channels: " + err.Error())
+		return
 	}
 	var abilities []*Ability
-	DB.Find(&abilities)
+	if err := DB.Find(&abilities).Error; err != nil {
+		logger.SysError("failed to reload channel abilities: " + err.Error())
+		return
+	}
 	groups := make(map[string]bool)
 	for _, ability := range abilities {
 		groups[ability.Group] = true
@@ -212,6 +237,7 @@ func InitChannelCache() {
 
 	channelSyncLock.Lock()
 	group2model2channels = newGroup2model2channels
+	channelCacheVersion = version
 	channelSyncLock.Unlock()
 	logger.SysLog("channels synced from database")
 }
@@ -225,8 +251,18 @@ func SyncChannelCache(frequency int) {
 }
 
 func CacheGetRandomSatisfiedChannel(group string, model string, ignoreFirstPriority bool) (*Channel, error) {
-	if !config.MemoryCacheEnabled {
+	if !config.MemoryCacheEnabled || !common.RedisEnabled {
 		return GetRandomSatisfiedChannel(group, model, ignoreFirstPriority)
+	}
+	version, err := currentChannelCacheVersion()
+	if err != nil {
+		return GetRandomSatisfiedChannel(group, model, ignoreFirstPriority)
+	}
+	channelSyncLock.RLock()
+	stale := channelCacheVersion != version
+	channelSyncLock.RUnlock()
+	if stale {
+		InitChannelCache()
 	}
 	channelSyncLock.RLock()
 	defer channelSyncLock.RUnlock()
