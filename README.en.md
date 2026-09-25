@@ -29,7 +29,7 @@ docker run -d --name one-gateway --restart unless-stopped -p 3000:3000 -v "$(pwd
 
 Open <http://localhost:3000>. On a new database, the application creates the `root` account with password `123456`. **Change that password immediately** in the console. The volume stores the default SQLite database; keep it when replacing the container. For an exposed deployment, configure HTTPS and a persistent `SESSION_SECRET` as well.
 
-The checked-in `docker-compose.yml` still names an upstream image. Use the build command above when you want to run this fork.
+The checked-in `docker-compose.yml` builds this fork locally and tags the image `one-gateway:local`. Existing database names and data paths are retained for upgrades.
 
 ## Build from source
 

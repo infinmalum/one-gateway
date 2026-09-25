@@ -9,17 +9,17 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/relay/adaptor"
-	"github.com/songquanpeng/one-api/relay/adaptor/alibailian"
-	"github.com/songquanpeng/one-api/relay/adaptor/baiduv2"
-	"github.com/songquanpeng/one-api/relay/adaptor/doubao"
-	"github.com/songquanpeng/one-api/relay/adaptor/geminiv2"
-	"github.com/songquanpeng/one-api/relay/adaptor/minimax"
-	"github.com/songquanpeng/one-api/relay/adaptor/novita"
-	"github.com/songquanpeng/one-api/relay/channeltype"
-	"github.com/songquanpeng/one-api/relay/meta"
-	"github.com/songquanpeng/one-api/relay/model"
-	"github.com/songquanpeng/one-api/relay/relaymode"
+	"github.com/infinmalum/one-gateway/relay/adaptor"
+	"github.com/infinmalum/one-gateway/relay/adaptor/alibailian"
+	"github.com/infinmalum/one-gateway/relay/adaptor/baiduv2"
+	"github.com/infinmalum/one-gateway/relay/adaptor/doubao"
+	"github.com/infinmalum/one-gateway/relay/adaptor/geminiv2"
+	"github.com/infinmalum/one-gateway/relay/adaptor/minimax"
+	"github.com/infinmalum/one-gateway/relay/adaptor/novita"
+	"github.com/infinmalum/one-gateway/relay/channeltype"
+	"github.com/infinmalum/one-gateway/relay/meta"
+	"github.com/infinmalum/one-gateway/relay/model"
+	"github.com/infinmalum/one-gateway/relay/relaymode"
 )
 
 type Adaptor struct {
@@ -75,7 +75,7 @@ func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Request, meta *me
 	}
 	req.Header.Set("Authorization", "Bearer "+meta.APIKey)
 	if meta.ChannelType == channeltype.OpenRouter {
-		req.Header.Set("HTTP-Referer", "https://github.com/songquanpeng/one-api")
+		req.Header.Set("HTTP-Referer", "https://github.com/infinmalum/one-gateway")
 		req.Header.Set("X-Title", "One API")
 	}
 	return nil

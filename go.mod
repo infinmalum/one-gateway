@@ -1,4 +1,4 @@
-module github.com/songquanpeng/one-api
+module github.com/infinmalum/one-gateway
 
 go 1.27.0
 

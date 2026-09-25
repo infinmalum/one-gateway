@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/songquanpeng/one-api/common/config"
-	"github.com/songquanpeng/one-api/common/logger"
+	"github.com/infinmalum/one-gateway/common/config"
+	"github.com/infinmalum/one-gateway/common/logger"
 )
 
 func shouldAuth() bool {

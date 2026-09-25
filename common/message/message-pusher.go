@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"github.com/songquanpeng/one-api/common/config"
+	"github.com/infinmalum/one-gateway/common/config"
 	"net/http"
 )
 

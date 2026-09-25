@@ -9,12 +9,12 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/songquanpeng/one-api/common/client"
-	"github.com/songquanpeng/one-api/common/config"
-	"github.com/songquanpeng/one-api/common/logger"
-	"github.com/songquanpeng/one-api/model"
-	"github.com/songquanpeng/one-api/monitor"
-	"github.com/songquanpeng/one-api/relay/channeltype"
+	"github.com/infinmalum/one-gateway/common/client"
+	"github.com/infinmalum/one-gateway/common/config"
+	"github.com/infinmalum/one-gateway/common/logger"
+	"github.com/infinmalum/one-gateway/model"
+	"github.com/infinmalum/one-gateway/monitor"
+	"github.com/infinmalum/one-gateway/relay/channeltype"
 
 	"github.com/gin-gonic/gin"
 )

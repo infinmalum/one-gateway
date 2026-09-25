@@ -29,7 +29,7 @@ docker run -d --name one-gateway --restart unless-stopped -p 3000:3000 -v "$(pwd
 
 打开 <http://localhost:3000>。数据库首次初始化时会创建 `root` 账号，密码为 `123456`。**首次登录后请立即修改密码。**挂载目录保存默认的 SQLite 数据库，更换容器时应保留该目录。对外提供服务时还应配置 HTTPS 和固定的 `SESSION_SECRET`。
 
-仓库现有的 `docker-compose.yml` 仍指向原项目镜像。若要运行本派生项目，请使用上面的本地构建命令。
+仓库的 `docker-compose.yml` 会在本地构建本项目，并将镜像标记为 `one-gateway:local`。为兼容已有部署，数据库名称与数据目录保持不变。
 
 ## 从源码构建
 

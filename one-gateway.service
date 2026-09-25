@@ -1,0 +1,18 @@
+# File path: /etc/systemd/system/one-gateway.service
+# sudo systemctl daemon-reload
+# sudo systemctl start one-gateway
+# sudo systemctl enable one-gateway
+# sudo systemctl status one-gateway
+[Unit]
+Description=One Gateway Service
+After=network.target
+
+[Service]
+User=ubuntu  # 注意修改用户名
+WorkingDirectory=/path/to/one-gateway  # 注意修改路径
+ExecStart=/path/to/one-gateway/one-gateway --port 3000 --log-dir /path/to/one-gateway/logs  # 注意修改路径和端口号
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
