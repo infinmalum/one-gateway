@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/songquanpeng/one-api/common/logger"
+	"github.com/infinmalum/one-gateway/common/logger"
 )
 
 var RDB redis.Cmdable

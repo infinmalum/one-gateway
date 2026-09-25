@@ -8,22 +8,22 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/songquanpeng/one-api/common/helper"
-	"github.com/songquanpeng/one-api/relay/constant/role"
+	"github.com/infinmalum/one-gateway/common/helper"
+	"github.com/infinmalum/one-gateway/relay/constant/role"
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/songquanpeng/one-api/common"
-	"github.com/songquanpeng/one-api/common/config"
-	"github.com/songquanpeng/one-api/common/logger"
-	"github.com/songquanpeng/one-api/model"
-	"github.com/songquanpeng/one-api/relay/adaptor/openai"
-	billingratio "github.com/songquanpeng/one-api/relay/billing/ratio"
-	"github.com/songquanpeng/one-api/relay/channeltype"
-	"github.com/songquanpeng/one-api/relay/controller/validator"
-	"github.com/songquanpeng/one-api/relay/meta"
-	relaymodel "github.com/songquanpeng/one-api/relay/model"
-	"github.com/songquanpeng/one-api/relay/relaymode"
+	"github.com/infinmalum/one-gateway/common"
+	"github.com/infinmalum/one-gateway/common/config"
+	"github.com/infinmalum/one-gateway/common/logger"
+	"github.com/infinmalum/one-gateway/model"
+	"github.com/infinmalum/one-gateway/relay/adaptor/openai"
+	billingratio "github.com/infinmalum/one-gateway/relay/billing/ratio"
+	"github.com/infinmalum/one-gateway/relay/channeltype"
+	"github.com/infinmalum/one-gateway/relay/controller/validator"
+	"github.com/infinmalum/one-gateway/relay/meta"
+	relaymodel "github.com/infinmalum/one-gateway/relay/model"
+	"github.com/infinmalum/one-gateway/relay/relaymode"
 )
 
 func getAndValidateTextRequest(c *gin.Context, relayMode int) (*relaymodel.GeneralOpenAIRequest, error) {

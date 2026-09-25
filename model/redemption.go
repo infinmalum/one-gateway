@@ -8,8 +8,8 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
-	"github.com/songquanpeng/one-api/common"
-	"github.com/songquanpeng/one-api/common/helper"
+	"github.com/infinmalum/one-gateway/common"
+	"github.com/infinmalum/one-gateway/common/helper"
 )
 
 const (

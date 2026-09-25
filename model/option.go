@@ -1,9 +1,9 @@
 package model
 
 import (
-	"github.com/songquanpeng/one-api/common/config"
-	"github.com/songquanpeng/one-api/common/logger"
-	billingratio "github.com/songquanpeng/one-api/relay/billing/ratio"
+	"github.com/infinmalum/one-gateway/common/config"
+	"github.com/infinmalum/one-gateway/common/logger"
+	billingratio "github.com/infinmalum/one-gateway/relay/billing/ratio"
 	"strconv"
 	"strings"
 	"time"

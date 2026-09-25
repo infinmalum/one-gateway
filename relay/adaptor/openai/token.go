@@ -8,11 +8,11 @@ import (
 
 	"github.com/pkoukk/tiktoken-go"
 
-	"github.com/songquanpeng/one-api/common/config"
-	"github.com/songquanpeng/one-api/common/image"
-	"github.com/songquanpeng/one-api/common/logger"
-	billingratio "github.com/songquanpeng/one-api/relay/billing/ratio"
-	"github.com/songquanpeng/one-api/relay/model"
+	"github.com/infinmalum/one-gateway/common/config"
+	"github.com/infinmalum/one-gateway/common/image"
+	"github.com/infinmalum/one-gateway/common/logger"
+	billingratio "github.com/infinmalum/one-gateway/relay/billing/ratio"
+	"github.com/infinmalum/one-gateway/relay/model"
 )
 
 // tokenEncoderMap won't grow after initialization

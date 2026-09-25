@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/songquanpeng/one-api/common"
-	"github.com/songquanpeng/one-api/common/config"
+	"github.com/infinmalum/one-gateway/common"
+	"github.com/infinmalum/one-gateway/common/config"
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"

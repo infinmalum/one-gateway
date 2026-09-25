@@ -11,16 +11,16 @@ import (
 	"github.com/gin-gonic/gin"
 	_ "github.com/joho/godotenv/autoload"
 
-	"github.com/songquanpeng/one-api/common"
-	"github.com/songquanpeng/one-api/common/client"
-	"github.com/songquanpeng/one-api/common/config"
-	"github.com/songquanpeng/one-api/common/i18n"
-	"github.com/songquanpeng/one-api/common/logger"
-	"github.com/songquanpeng/one-api/controller"
-	"github.com/songquanpeng/one-api/middleware"
-	"github.com/songquanpeng/one-api/model"
-	"github.com/songquanpeng/one-api/relay/adaptor/openai"
-	"github.com/songquanpeng/one-api/router"
+	"github.com/infinmalum/one-gateway/common"
+	"github.com/infinmalum/one-gateway/common/client"
+	"github.com/infinmalum/one-gateway/common/config"
+	"github.com/infinmalum/one-gateway/common/i18n"
+	"github.com/infinmalum/one-gateway/common/logger"
+	"github.com/infinmalum/one-gateway/controller"
+	"github.com/infinmalum/one-gateway/middleware"
+	"github.com/infinmalum/one-gateway/model"
+	"github.com/infinmalum/one-gateway/relay/adaptor/openai"
+	"github.com/infinmalum/one-gateway/router"
 )
 
 //go:embed web/build/*
@@ -29,7 +29,7 @@ var buildFS embed.FS
 func main() {
 	common.Init()
 	logger.SetupLogger()
-	logger.SysLogf("One API %s started", common.Version)
+	logger.SysLogf("One Gateway %s started", common.Version)
 
 	if os.Getenv("GIN_MODE") != gin.DebugMode {
 		gin.SetMode(gin.ReleaseMode)

@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/songquanpeng/one-api/common/logger"
-	"github.com/songquanpeng/one-api/model"
+	"github.com/infinmalum/one-gateway/common/logger"
+	"github.com/infinmalum/one-gateway/model"
 )
 
 func ReturnPreConsumedQuota(ctx context.Context, preConsumedQuota int64, tokenId int) {

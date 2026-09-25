@@ -3,7 +3,7 @@ package middleware
 import (
 	"fmt"
 	"github.com/gin-gonic/gin"
-	"github.com/songquanpeng/one-api/common/helper"
+	"github.com/infinmalum/one-gateway/common/helper"
 )
 
 func SetUpLogger(server *gin.Engine) {

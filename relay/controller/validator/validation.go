@@ -2,8 +2,8 @@ package validator
 
 import (
 	"errors"
-	"github.com/songquanpeng/one-api/relay/model"
-	"github.com/songquanpeng/one-api/relay/relaymode"
+	"github.com/infinmalum/one-gateway/relay/model"
+	"github.com/infinmalum/one-gateway/relay/relaymode"
 	"math"
 )
 

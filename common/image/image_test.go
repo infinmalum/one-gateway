@@ -11,8 +11,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/songquanpeng/one-api/common/client"
-	img "github.com/songquanpeng/one-api/common/image"
+	"github.com/infinmalum/one-gateway/common/client"
+	img "github.com/infinmalum/one-gateway/common/image"
 	"github.com/stretchr/testify/require"
 	_ "golang.org/x/image/webp"
 )

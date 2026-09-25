@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/songquanpeng/one-api/common/render"
+	"github.com/infinmalum/one-gateway/common/render"
 	"io"
 	"net/http"
 	"strings"
@@ -13,12 +13,12 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/songquanpeng/one-api/common"
-	"github.com/songquanpeng/one-api/common/client"
-	"github.com/songquanpeng/one-api/common/logger"
-	"github.com/songquanpeng/one-api/relay/adaptor/openai"
-	"github.com/songquanpeng/one-api/relay/constant"
-	"github.com/songquanpeng/one-api/relay/model"
+	"github.com/infinmalum/one-gateway/common"
+	"github.com/infinmalum/one-gateway/common/client"
+	"github.com/infinmalum/one-gateway/common/logger"
+	"github.com/infinmalum/one-gateway/relay/adaptor/openai"
+	"github.com/infinmalum/one-gateway/relay/constant"
+	"github.com/infinmalum/one-gateway/relay/model"
 )
 
 // https://cloud.baidu.com/doc/WENXINWORKSHOP/s/flfmc9do2

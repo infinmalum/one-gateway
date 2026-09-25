@@ -4,18 +4,18 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
-	"github.com/songquanpeng/one-api/common/render"
+	"github.com/infinmalum/one-gateway/common/render"
 	"io"
 	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/songquanpeng/one-api/common"
-	"github.com/songquanpeng/one-api/common/helper"
-	"github.com/songquanpeng/one-api/common/image"
-	"github.com/songquanpeng/one-api/common/logger"
-	"github.com/songquanpeng/one-api/relay/adaptor/openai"
-	"github.com/songquanpeng/one-api/relay/model"
+	"github.com/infinmalum/one-gateway/common"
+	"github.com/infinmalum/one-gateway/common/helper"
+	"github.com/infinmalum/one-gateway/common/image"
+	"github.com/infinmalum/one-gateway/common/logger"
+	"github.com/infinmalum/one-gateway/relay/adaptor/openai"
+	"github.com/infinmalum/one-gateway/relay/model"
 )
 
 func stopReasonClaude2OpenAI(reason *string) string {

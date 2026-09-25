@@ -8,10 +8,10 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/songquanpeng/one-api/relay/adaptor/openai"
-	"github.com/songquanpeng/one-api/relay/apitype"
-	"github.com/songquanpeng/one-api/relay/meta"
-	"github.com/songquanpeng/one-api/relay/model"
+	"github.com/infinmalum/one-gateway/relay/adaptor/openai"
+	"github.com/infinmalum/one-gateway/relay/apitype"
+	"github.com/infinmalum/one-gateway/relay/meta"
+	"github.com/infinmalum/one-gateway/relay/model"
 	"github.com/stretchr/testify/require"
 )
 

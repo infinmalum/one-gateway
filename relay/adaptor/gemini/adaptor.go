@@ -8,13 +8,13 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/songquanpeng/one-api/common/config"
-	"github.com/songquanpeng/one-api/common/helper"
-	channelhelper "github.com/songquanpeng/one-api/relay/adaptor"
-	"github.com/songquanpeng/one-api/relay/adaptor/openai"
-	"github.com/songquanpeng/one-api/relay/meta"
-	"github.com/songquanpeng/one-api/relay/model"
-	"github.com/songquanpeng/one-api/relay/relaymode"
+	"github.com/infinmalum/one-gateway/common/config"
+	"github.com/infinmalum/one-gateway/common/helper"
+	channelhelper "github.com/infinmalum/one-gateway/relay/adaptor"
+	"github.com/infinmalum/one-gateway/relay/adaptor/openai"
+	"github.com/infinmalum/one-gateway/relay/meta"
+	"github.com/infinmalum/one-gateway/relay/model"
+	"github.com/infinmalum/one-gateway/relay/relaymode"
 )
 
 type Adaptor struct {
