@@ -92,6 +92,14 @@ func TokenAuth() func(c *gin.Context) {
 	return func(c *gin.Context) {
 		ctx := c.Request.Context()
 		key := c.Request.Header.Get("Authorization")
+		if key == "" {
+			switch {
+			case c.Request.URL.Path == "/v1/messages":
+				key = c.Request.Header.Get("x-api-key")
+			case isNativeGeminiRequest(c):
+				key = c.Request.Header.Get("x-goog-api-key")
+			}
+		}
 		key = strings.TrimPrefix(key, "Bearer ")
 		key = strings.TrimPrefix(key, "sk-")
 		token, err := model.ValidateUserToken(key)
@@ -174,6 +182,9 @@ func shouldCheckModel(c *gin.Context) bool {
 		return true
 	}
 	if strings.HasPrefix(c.Request.URL.Path, "/v1/audio") {
+		return true
+	}
+	if c.Request.URL.Path == "/v1/messages" || isNativeGeminiRequest(c) {
 		return true
 	}
 	return false

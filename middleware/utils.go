@@ -6,10 +6,38 @@ import (
 	"github.com/infinmalum/one-gateway/common"
 	"github.com/infinmalum/one-gateway/common/helper"
 	"github.com/infinmalum/one-gateway/common/logger"
+	"net/http"
 	"strings"
 )
 
 func abortWithMessage(c *gin.Context, statusCode int, message string) {
+	path := c.Request.URL.Path
+	if path == "/v1/messages" {
+		kind := "invalid_request_error"
+		if statusCode == 401 {
+			kind = "authentication_error"
+		} else if statusCode >= 500 {
+			kind = "api_error"
+		}
+		c.JSON(statusCode, gin.H{"type": "error", "error": gin.H{"type": kind, "message": message}})
+		c.Abort()
+		logger.Error(c.Request.Context(), message)
+		return
+	}
+	if isNativeGeminiRequest(c) {
+		status := "INVALID_ARGUMENT"
+		if statusCode == 401 {
+			status = "UNAUTHENTICATED"
+		} else if statusCode == 403 {
+			status = "PERMISSION_DENIED"
+		} else if statusCode >= 500 {
+			status = "UNAVAILABLE"
+		}
+		c.JSON(statusCode, gin.H{"error": gin.H{"code": statusCode, "message": message, "status": status}})
+		c.Abort()
+		logger.Error(c.Request.Context(), message)
+		return
+	}
 	c.JSON(statusCode, gin.H{
 		"error": gin.H{
 			"message": helper.MessageWithRequestId(message, c.GetString(helper.RequestIdKey)),
@@ -18,6 +46,11 @@ func abortWithMessage(c *gin.Context, statusCode int, message string) {
 	})
 	c.Abort()
 	logger.Error(c.Request.Context(), message)
+}
+
+func isNativeGeminiRequest(c *gin.Context) bool {
+	return c.Request.Method == http.MethodPost && c.Param("modelAction") != "" &&
+		(strings.HasPrefix(c.Request.URL.Path, "/v1beta/models/") || strings.HasPrefix(c.Request.URL.Path, "/v1/models/"))
 }
 
 func getRequestModel(c *gin.Context) (string, error) {
@@ -44,6 +77,11 @@ func getRequestModel(c *gin.Context) (string, error) {
 	if strings.HasPrefix(c.Request.URL.Path, "/v1/audio/transcriptions") || strings.HasPrefix(c.Request.URL.Path, "/v1/audio/translations") {
 		if modelRequest.Model == "" {
 			modelRequest.Model = "whisper-1"
+		}
+	}
+	if modelAction := c.Param("modelAction"); modelAction != "" {
+		if separator := strings.LastIndexByte(modelAction, ':'); separator > 0 {
+			modelRequest.Model = modelAction[:separator]
 		}
 	}
 	return modelRequest.Model, nil
