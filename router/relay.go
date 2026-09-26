@@ -3,6 +3,7 @@ package router
 import (
 	"github.com/infinmalum/one-gateway/controller"
 	"github.com/infinmalum/one-gateway/middleware"
+	"github.com/infinmalum/one-gateway/relay/channeltype"
 
 	"github.com/gin-gonic/gin"
 )
@@ -10,6 +11,14 @@ import (
 func SetRelayRouter(router *gin.Engine) {
 	router.Use(middleware.CORS())
 	router.Use(middleware.GzipDecodeMiddleware())
+	nativeAnthropic := router.Group("/v1")
+	nativeAnthropic.Use(middleware.RelayPanicRecover(), middleware.TokenAuth(), middleware.DistributeChannelType(channeltype.Anthropic))
+	nativeAnthropic.POST("/messages", controller.NativeAnthropic)
+	for _, version := range []string{"/v1", "/v1beta"} {
+		nativeGemini := router.Group(version)
+		nativeGemini.Use(middleware.RelayPanicRecover(), middleware.TokenAuth(), middleware.DistributeChannelType(channeltype.Gemini))
+		nativeGemini.POST("/models/:modelAction", controller.NativeGemini)
+	}
 	// https://platform.openai.com/docs/api-reference/introduction
 	modelsRouter := router.Group("/v1/models")
 	modelsRouter.Use(middleware.TokenAuth())

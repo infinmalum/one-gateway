@@ -2,6 +2,8 @@ package model
 
 import (
 	"context"
+	"errors"
+	"math/rand"
 	"sort"
 	"strings"
 
@@ -10,6 +12,49 @@ import (
 	"github.com/infinmalum/one-gateway/common"
 	"github.com/infinmalum/one-gateway/common/utils"
 )
+
+// GetRandomSatisfiedChannelByType selects a channel that can receive a native
+// protocol request. A mixed-provider group must not randomly choose a channel
+// that requires an unimplemented cross-protocol conversion.
+func GetRandomSatisfiedChannelByType(group, model string, channelType int, ignoreFirstPriority bool) (*Channel, error) {
+	var abilities []Ability
+	groupColumn := "`group`"
+	if common.UsingPostgreSQL {
+		groupColumn = `"group"`
+	}
+	if err := DB.Where("enabled = ? AND model = ?", true, model).Where(groupColumn+" = ?", group).Find(&abilities).Error; err != nil {
+		return nil, err
+	}
+	if len(abilities) == 0 {
+		return nil, errors.New("channel not found")
+	}
+	ids := make([]int, 0, len(abilities))
+	for _, ability := range abilities {
+		ids = append(ids, ability.ChannelId)
+	}
+	var channels []Channel
+	if err := DB.Where("id IN ? AND type = ? AND status = ?", ids, channelType, ChannelStatusEnabled).Find(&channels).Error; err != nil {
+		return nil, err
+	}
+	if len(channels) == 0 {
+		return nil, errors.New("channel not found")
+	}
+	sort.Slice(channels, func(i, j int) bool { return channels[i].GetPriority() > channels[j].GetPriority() })
+	firstPriority := channels[0].GetPriority()
+	end := len(channels)
+	if firstPriority > 0 {
+		for i := range channels {
+			if channels[i].GetPriority() != firstPriority {
+				end = i
+				break
+			}
+		}
+	}
+	if ignoreFirstPriority && end < len(channels) {
+		return &channels[end+rand.Intn(len(channels)-end)], nil
+	}
+	return &channels[rand.Intn(end)], nil
+}
 
 type Ability struct {
 	Group     string `json:"group" gorm:"type:varchar(32);primaryKey;autoIncrement:false"`

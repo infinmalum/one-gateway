@@ -118,6 +118,16 @@ func CacheUpdateUserQuota(ctx context.Context, id int) error {
 	return err
 }
 
+// CacheRefreshUserQuota replaces a provisional cached balance with the
+// committed database balance after a native relay settles or refunds quota.
+func CacheRefreshUserQuota(ctx context.Context, id int) error {
+	if !common.RedisEnabled {
+		return nil
+	}
+	_, err := fetchAndUpdateUserQuota(ctx, id)
+	return err
+}
+
 func CacheDecreaseUserQuota(id int, quota int64) error {
 	if !common.RedisEnabled {
 		return nil

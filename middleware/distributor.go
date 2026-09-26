@@ -18,6 +18,16 @@ type ModelRequest struct {
 }
 
 func Distribute() func(c *gin.Context) {
+	return distribute(0)
+}
+
+// DistributeChannelType keeps native protocol requests on an upstream that
+// speaks the same wire format until cross-protocol converters are available.
+func DistributeChannelType(channelType int) func(c *gin.Context) {
+	return distribute(channelType)
+}
+
+func distribute(requiredChannelType int) func(c *gin.Context) {
 	return func(c *gin.Context) {
 		ctx := c.Request.Context()
 		userId := c.GetInt(ctxkey.Id)
@@ -41,10 +51,18 @@ func Distribute() func(c *gin.Context) {
 				abortWithMessage(c, http.StatusForbidden, "该渠道已被禁用")
 				return
 			}
+			if requiredChannelType != 0 && channel.Type != requiredChannelType {
+				abortWithMessage(c, http.StatusBadRequest, "指定渠道不支持此原生协议")
+				return
+			}
 		} else {
 			requestModel = c.GetString(ctxkey.RequestModel)
 			var err error
-			channel, err = model.CacheGetRandomSatisfiedChannel(userGroup, requestModel, false)
+			if requiredChannelType != 0 {
+				channel, err = model.GetRandomSatisfiedChannelByType(userGroup, requestModel, requiredChannelType, false)
+			} else {
+				channel, err = model.CacheGetRandomSatisfiedChannel(userGroup, requestModel, false)
+			}
 			if err != nil {
 				message := fmt.Sprintf("当前分组 %s 下对于模型 %s 无可用渠道", userGroup, requestModel)
 				if channel != nil {
