@@ -3,7 +3,6 @@ package router
 import (
 	"github.com/infinmalum/one-gateway/controller"
 	"github.com/infinmalum/one-gateway/middleware"
-	"github.com/infinmalum/one-gateway/relay/channeltype"
 
 	"github.com/gin-gonic/gin"
 )
@@ -12,14 +11,14 @@ func SetRelayRouter(router *gin.Engine) {
 	router.Use(middleware.CORS())
 	router.Use(middleware.GzipDecodeMiddleware())
 	nativeOpenAI := router.Group("/v1")
-	nativeOpenAI.Use(middleware.RelayPanicRecover(), middleware.TokenAuth(), middleware.DistributeChannelType(channeltype.OpenAI))
+	nativeOpenAI.Use(middleware.RelayPanicRecover(), middleware.TokenAuth())
 	nativeOpenAI.POST("/responses", controller.NativeOpenAIResponses)
 	nativeAnthropic := router.Group("/v1")
-	nativeAnthropic.Use(middleware.RelayPanicRecover(), middleware.TokenAuth(), middleware.DistributeChannelType(channeltype.Anthropic))
+	nativeAnthropic.Use(middleware.RelayPanicRecover(), middleware.TokenAuth())
 	nativeAnthropic.POST("/messages", controller.NativeAnthropic)
 	for _, version := range []string{"/v1", "/v1beta"} {
 		nativeGemini := router.Group(version)
-		nativeGemini.Use(middleware.RelayPanicRecover(), middleware.TokenAuth(), middleware.DistributeChannelType(channeltype.Gemini))
+		nativeGemini.Use(middleware.RelayPanicRecover(), middleware.TokenAuth())
 		nativeGemini.POST("/models/:modelAction", controller.NativeGemini)
 	}
 	// https://platform.openai.com/docs/api-reference/introduction

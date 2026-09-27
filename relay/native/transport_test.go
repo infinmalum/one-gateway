@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -197,5 +198,102 @@ func TestOpenAIResponsesTerminalEventsKeepTheirUsage(t *testing.T) {
 		if err != nil || w.Body.String() != events || !usage.Complete || !usage.Seen || usage.Input != 9 || usage.Output != 2 {
 			t.Fatalf("%s lost the terminal event or usage: %+v %q %v", eventType, usage, w.Body.String(), err)
 		}
+	}
+}
+
+func TestOpenAIChatPreservesUnmappedBodyAndStreamUsage(t *testing.T) {
+	body := []byte("{\n  \"model\": \"same\", \"messages\": [{\"role\":\"user\",\"content\":\"hello\"}], \"future\": true\n}")
+	request, err := BuildRequest(context.Background(), Request{Protocol: OpenAIChat, BaseURL: "https://example.com", Model: "same", APIKey: "provider-key", Body: body})
+	if err != nil {
+		t.Fatal(err)
+	}
+	forwarded, _ := io.ReadAll(request.Body)
+	if request.URL.Path != "/v1/chat/completions" || request.Header.Get("Authorization") != "Bearer provider-key" || !bytes.Equal(body, forwarded) {
+		t.Fatalf("unmapped OpenAI Chat request changed: %s %v", forwarded, request.Header)
+	}
+	events := "data: {\"choices\":[],\"usage\":{\"prompt_tokens\":3,\"completion_tokens\":5}}\n\n" + "data: [DONE]\n\n"
+	w := httptest.NewRecorder()
+	usage, err := CopyResponse(w, strings.NewReader(events), OpenAIChat, true)
+	if err != nil || w.Body.String() != events || !usage.Seen || !usage.Complete || usage.Input != 3 || usage.Output != 5 {
+		t.Fatalf("OpenAI Chat stream or usage changed: %+v %q %v", usage, w.Body.String(), err)
+	}
+}
+
+func TestOpenAIChatSystemPromptPreservesOtherFields(t *testing.T) {
+	body := []byte(`{"model":"alias","messages":[{"role":"system","content":"old","future":true},{"role":"user","content":"hi"}],"tools":[{"type":"function","function":{"name":"search"}}],"future":{"keep":true}}`)
+	request, err := BuildRequest(context.Background(), Request{Protocol: OpenAIChat, BaseURL: "https://example.com", Model: "upstream", APIKey: "key", SystemPrompt: "configured", Body: body})
+	if err != nil {
+		t.Fatal(err)
+	}
+	forwarded, _ := io.ReadAll(request.Body)
+	var fields struct {
+		Model    string `json:"model"`
+		Messages []struct {
+			Role    string `json:"role"`
+			Content string `json:"content"`
+			Future  bool   `json:"future"`
+		} `json:"messages"`
+		Tools  json.RawMessage `json:"tools"`
+		Future json.RawMessage `json:"future"`
+	}
+	if err := json.Unmarshal(forwarded, &fields); err != nil || fields.Model != "upstream" || len(fields.Messages) != 2 || fields.Messages[0].Content != "configured" || !fields.Messages[0].Future || len(fields.Tools) == 0 || string(fields.Future) != `{"keep":true}` {
+		t.Fatalf("OpenAI Chat system prompt changed unrelated fields: %s %v", forwarded, err)
+	}
+}
+
+func TestOpenAIEmbeddingsPreserveFieldsAndLargeUsage(t *testing.T) {
+	body := []byte(`{"model":"alias","input":["first","second"],"dimensions":256,"encoding_format":"base64","future":{"keep":true}}`)
+	unmapped, err := BuildRequest(context.Background(), Request{Protocol: OpenAIEmbeddings, BaseURL: "https://example.com", Model: "alias", APIKey: "provider-key", Body: body})
+	if err != nil {
+		t.Fatal(err)
+	}
+	unmappedBody, _ := io.ReadAll(unmapped.Body)
+	if !bytes.Equal(unmappedBody, body) {
+		t.Fatalf("unmapped embedding request changed: %s", unmappedBody)
+	}
+	request, err := BuildRequest(context.Background(), Request{Protocol: OpenAIEmbeddings, BaseURL: "https://example.com", Model: "upstream", APIKey: "provider-key", Body: body})
+	if err != nil {
+		t.Fatal(err)
+	}
+	forwarded, _ := io.ReadAll(request.Body)
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(forwarded, &fields); err != nil || request.URL.Path != "/v1/embeddings" || request.Header.Get("Authorization") != "Bearer provider-key" || string(fields["model"]) != `"upstream"` || string(fields["input"]) != `["first","second"]` || string(fields["future"]) != `{"keep":true}` {
+		t.Fatalf("embedding request changed: %s %v", forwarded, err)
+	}
+	large := `{"object":"list","data":[{"embedding":[` + strings.Repeat("0.123456,", 300000) + `0.123456]}],"usage":{"prompt_tokens":13,"total_tokens":13}}`
+	w := httptest.NewRecorder()
+	usage, err := CopyResponse(w, strings.NewReader(large), OpenAIEmbeddings, false)
+	if err != nil || w.Body.String() != large || !usage.Seen || usage.Input != 13 || usage.Output != 0 {
+		t.Fatalf("large embedding response lost usage: %+v len=%d err=%v", usage, w.Body.Len(), err)
+	}
+}
+
+func TestOpenAICompletionsPreserveBodyAndStream(t *testing.T) {
+	body := []byte("{\n  \"model\": \"same\", \"prompt\": \"hello\", \"stream\": true, \"logprobs\": 3, \"future\": true\n}")
+	request, err := BuildRequest(context.Background(), Request{Protocol: OpenAICompletions, BaseURL: "https://example.com", Model: "same", APIKey: "provider-key", Body: body})
+	if err != nil {
+		t.Fatal(err)
+	}
+	forwarded, _ := io.ReadAll(request.Body)
+	if !bytes.Equal(forwarded, body) || request.URL.Path != "/v1/completions" || request.Header.Get("Accept") != "text/event-stream" {
+		t.Fatalf("unmapped Completions request changed: %s %v", forwarded, request.Header)
+	}
+	events := "data: {\"choices\":[{\"text\":\"hello\"}]}\n\n" + "data: {\"choices\":[],\"usage\":{\"prompt_tokens\":2,\"completion_tokens\":3}}\n\n" + "data: [DONE]\n\n"
+	w := httptest.NewRecorder()
+	usage, err := CopyResponse(w, strings.NewReader(events), OpenAICompletions, true)
+	if err != nil || w.Body.String() != events || !usage.Seen || !usage.Complete || usage.Input != 2 || usage.Output != 3 {
+		t.Fatalf("Completions stream or usage changed: %+v %q %v", usage, w.Body.String(), err)
+	}
+}
+
+type brokenReader struct{}
+
+func (brokenReader) Read([]byte) (int, error) { return 0, errors.New("upstream interrupted") }
+
+func TestNonStreamingCopyReportsUpstreamReadFailure(t *testing.T) {
+	w := httptest.NewRecorder()
+	usage, err := CopyResponse(w, io.MultiReader(strings.NewReader(`{"data":[`), brokenReader{}), OpenAIEmbeddings, false)
+	if err == nil || usage.Complete || w.Body.String() != `{"data":[` {
+		t.Fatalf("read failure was hidden: usage %+v body %q err %v", usage, w.Body.String(), err)
 	}
 }

@@ -101,6 +101,33 @@ func (u *Usage) observe(protocol Protocol, data []byte) {
 			u.Output = max(u.Output, usage.OutputTokens)
 			u.Seen = true
 		}
+	case OpenAIChat, OpenAICompletions:
+		if bytes.Equal(bytes.TrimSpace(data), []byte("[DONE]")) {
+			u.Complete = true
+			return
+		}
+		var result struct {
+			Usage *struct {
+				PromptTokens     int64 `json:"prompt_tokens"`
+				CompletionTokens int64 `json:"completion_tokens"`
+			} `json:"usage"`
+		}
+		if json.Unmarshal(data, &result) == nil && result.Usage != nil {
+			u.Input = max(u.Input, result.Usage.PromptTokens)
+			u.Output = max(u.Output, result.Usage.CompletionTokens)
+			u.Seen = true
+		}
+	case OpenAIEmbeddings:
+		var result struct {
+			Usage *struct {
+				PromptTokens int64 `json:"prompt_tokens"`
+				TotalTokens  int64 `json:"total_tokens"`
+			} `json:"usage"`
+		}
+		if json.Unmarshal(data, &result) == nil && result.Usage != nil {
+			u.Input = max(result.Usage.PromptTokens, result.Usage.TotalTokens)
+			u.Seen = true
+		}
 	}
 }
 
@@ -109,13 +136,7 @@ func (u *Usage) observe(protocol Protocol, data []byte) {
 func CopyResponse(dst http.ResponseWriter, src io.Reader, protocol Protocol, stream bool) (Usage, error) {
 	var usage Usage
 	if !stream {
-		capture := &boundedCapture{limit: 2 << 20}
-		_, err := io.Copy(dst, io.TeeReader(src, capture))
-		if err == nil && !capture.overflow {
-			usage.observe(protocol, capture.data)
-		}
-		usage.Complete = err == nil
-		return usage, err
+		return copyJSONResponse(dst, src, protocol)
 	}
 	observer := &sseObserver{protocol: protocol, usage: &usage}
 	_, err := io.Copy(&observingWriter{dst: dst, observer: observer}, src)
@@ -125,19 +146,101 @@ func CopyResponse(dst http.ResponseWriter, src io.Reader, protocol Protocol, str
 	return usage, err
 }
 
-type boundedCapture struct {
-	data     []byte
-	limit    int
-	overflow bool
+type errorRecordingWriter struct {
+	dst http.ResponseWriter
+	err error
 }
 
-func (c *boundedCapture) Write(p []byte) (int, error) {
-	if len(c.data)+len(p) > c.limit {
-		c.overflow = true
-		return len(p), nil
+type errorRecordingReader struct {
+	src io.Reader
+	err error
+}
+
+func (r *errorRecordingReader) Read(p []byte) (int, error) {
+	n, err := r.src.Read(p)
+	if err != nil && err != io.EOF {
+		r.err = err
 	}
-	c.data = append(c.data, p...)
-	return len(p), nil
+	return n, err
+}
+
+func (w *errorRecordingWriter) Write(p []byte) (int, error) {
+	if w.err != nil {
+		return 0, w.err
+	}
+	n, err := w.dst.Write(p)
+	if err == nil && n != len(p) {
+		err = io.ErrShortWrite
+	}
+	w.err = err
+	return n, err
+}
+
+// copyJSONResponse decodes only top-level usage while forwarding the entire
+// response. Large embedding arrays therefore do not need to be buffered.
+func copyJSONResponse(dst http.ResponseWriter, src io.Reader, protocol Protocol) (Usage, error) {
+	var usage Usage
+	writer := &errorRecordingWriter{dst: dst}
+	reader := &errorRecordingReader{src: src}
+	tee := io.TeeReader(reader, writer)
+	decoder := json.NewDecoder(tee)
+	if token, err := decoder.Token(); err == nil && token == json.Delim('{') {
+		for decoder.More() {
+			key, err := decoder.Token()
+			if err != nil {
+				break
+			}
+			name, ok := key.(string)
+			if !ok {
+				break
+			}
+			if name == "usage" || name == "usageMetadata" {
+				var raw json.RawMessage
+				if decoder.Decode(&raw) != nil {
+					break
+				}
+				wrapped := append(append([]byte(`{"`+name+`":`), raw...), '}')
+				usage.observe(protocol, wrapped)
+			} else if skipJSONValue(decoder) != nil {
+				break
+			}
+		}
+	}
+	_, err := io.Copy(io.Discard, tee)
+	if writer.err != nil {
+		err = writer.err
+	} else if reader.err != nil {
+		err = reader.err
+	}
+	usage.Complete = err == nil
+	return usage, err
+}
+
+func skipJSONValue(decoder *json.Decoder) error {
+	token, err := decoder.Token()
+	if err != nil {
+		return err
+	}
+	delim, ok := token.(json.Delim)
+	if !ok || (delim != '{' && delim != '[') {
+		return nil
+	}
+	depth := 1
+	for depth > 0 {
+		token, err = decoder.Token()
+		if err != nil {
+			return err
+		}
+		if nested, ok := token.(json.Delim); ok {
+			switch nested {
+			case '{', '[':
+				depth++
+			case '}', ']':
+				depth--
+			}
+		}
+	}
+	return nil
 }
 
 type observingWriter struct {

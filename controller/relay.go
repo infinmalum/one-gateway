@@ -16,6 +16,7 @@ import (
 	"github.com/infinmalum/one-gateway/middleware"
 	dbmodel "github.com/infinmalum/one-gateway/model"
 	"github.com/infinmalum/one-gateway/monitor"
+	"github.com/infinmalum/one-gateway/relay/channeltype"
 	"github.com/infinmalum/one-gateway/relay/controller"
 	"github.com/infinmalum/one-gateway/relay/model"
 	"github.com/infinmalum/one-gateway/relay/relaymode"
@@ -45,6 +46,18 @@ func relayHelper(c *gin.Context, relayMode int) *model.ErrorWithStatusCode {
 func Relay(c *gin.Context) {
 	ctx := c.Request.Context()
 	relayMode := relaymode.GetByPath(c.Request.URL.Path)
+	if relayMode == relaymode.ChatCompletions && c.GetInt(ctxkey.Channel) == channeltype.OpenAI {
+		NativeOpenAIChat(c)
+		return
+	}
+	if relayMode == relaymode.Embeddings && c.GetInt(ctxkey.Channel) == channeltype.OpenAI {
+		NativeOpenAIEmbeddings(c)
+		return
+	}
+	if relayMode == relaymode.Completions && c.GetInt(ctxkey.Channel) == channeltype.OpenAI && c.GetString(ctxkey.SystemPrompt) == "" {
+		NativeOpenAICompletions(c)
+		return
+	}
 	if config.DebugEnabled {
 		requestBody, _ := common.GetRequestBody(c)
 		logger.Debugf(ctx, "request body: %s", string(requestBody))

@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -49,7 +50,7 @@ func TestNativeRoutesSelectMatchingProtocolAndPreserveWireData(t *testing.T) {
 		config.RetryTimes = previousRetries
 		_ = sqlDB.Close()
 	})
-	user := model.User{Username: "native-test", Status: model.UserStatusEnabled, Group: "default", Quota: 1000000}
+	user := model.User{Username: "native-test", Status: model.UserStatusEnabled, Role: model.RoleAdminUser, Group: "default", Quota: 1000000}
 	if err := db.Create(&user).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -264,6 +265,13 @@ func TestNativeRoutesSelectMatchingProtocolAndPreserveWireData(t *testing.T) {
 	if unsupportedGeminiResponse.Code != http.StatusServiceUnavailable || !strings.Contains(unsupportedGeminiResponse.Body.String(), `"status":"UNAVAILABLE"`) || !strings.Contains(unsupportedGeminiResponse.Body.String(), "Gemini") {
 		t.Fatalf("unsupported Gemini channel: status %d body %s", unsupportedGeminiResponse.Code, unsupportedGeminiResponse.Body.String())
 	}
+	specificMismatch := httptest.NewRequest(http.MethodPost, "/v1/messages", strings.NewReader(`{"model":"openai-only","messages":[],"max_tokens":8}`))
+	specificMismatch.Header.Set("Authorization", "Bearer sk-gateway-key-"+strconv.Itoa(openAIOnly.Id))
+	specificResponse := httptest.NewRecorder()
+	r.ServeHTTP(specificResponse, specificMismatch)
+	if specificResponse.Code != http.StatusBadRequest || !strings.Contains(specificResponse.Body.String(), "does not support this protocol") {
+		t.Fatalf("specific channel bypassed protocol restriction: status %d body %s", specificResponse.Code, specificResponse.Body.String())
+	}
 
 	quotaBeforeCancel, err := model.GetUserQuota(user.Id)
 	if err != nil {
@@ -353,8 +361,171 @@ func TestNativeRoutesSelectMatchingProtocolAndPreserveWireData(t *testing.T) {
 	legacyResponse := httptest.NewRecorder()
 	r.ServeHTTP(legacyResponse, legacyRequest)
 	quotaAfterLegacyFailure, err := model.GetUserQuota(user.Id)
-	if legacyResponse.Code != http.StatusInternalServerError || !strings.Contains(legacyResponse.Body.String(), "do_request_failed") || err != nil || quotaAfterLegacyFailure != quotaBeforeLegacyFailure {
-		t.Fatalf("legacy upstream failure leaked reserved quota: status %d body %s before %d after %d err %v", legacyResponse.Code, legacyResponse.Body.String(), quotaBeforeLegacyFailure, quotaAfterLegacyFailure, err)
+	if legacyResponse.Code != http.StatusBadGateway || !strings.Contains(legacyResponse.Body.String(), "upstream request failed") || err != nil || quotaAfterLegacyFailure != quotaBeforeLegacyFailure {
+		t.Fatalf("OpenAI Chat upstream failure leaked reserved quota: status %d body %s before %d after %d err %v", legacyResponse.Code, legacyResponse.Body.String(), quotaBeforeLegacyFailure, quotaAfterLegacyFailure, err)
+	}
+	chatNormal := `{"id":"chat-1","choices":[{"message":{"role":"assistant","content":"ok"}}],"usage":{"prompt_tokens":4,"completion_tokens":6},"future":true}`
+	chatEvents := "data: {\"id\":\"chat-1\",\"choices\":[{\"delta\":{\"content\":\"ok\"}}],\"future\":true}\n\n" +
+		"data: {\"id\":\"chat-1\",\"choices\":[],\"usage\":{\"prompt_tokens\":4,\"completion_tokens\":6}}\n\n" +
+		"data: [DONE]\n\n"
+	chatServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/chat/completions" || r.Header.Get("Authorization") != "Bearer chat-provider-key" || r.Header.Get("OpenAI-Beta") != "test-beta" {
+			t.Errorf("OpenAI Chat upstream route or credential changed: %s %v", r.URL, r.Header)
+		}
+		body, _ := io.ReadAll(r.Body)
+		if !strings.Contains(string(body), `"model":"chat-upstream"`) || !strings.Contains(string(body), `"future":{"preserve":true}`) || !strings.Contains(string(body), `"image_url"`) {
+			t.Errorf("OpenAI Chat lost request fields: %s", body)
+		}
+		if strings.Contains(string(body), `"stream":true`) {
+			w.Header().Set("Content-Type", "text/event-stream")
+			_, _ = io.WriteString(w, chatEvents)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, chatNormal)
+	}))
+	defer chatServer.Close()
+	chatURL, chatMapping := chatServer.URL, `{"chat-alias":"chat-upstream"}`
+	chatChannel := model.Channel{Type: channeltype.OpenAI, Key: "chat-provider-key", Name: "chat", Status: model.ChannelStatusEnabled, Group: "default", Models: "chat-alias", BaseURL: &chatURL, ModelMapping: &chatMapping}
+	if err := chatChannel.Insert(); err != nil {
+		t.Fatal(err)
+	}
+	chatInput := `{"model":"chat-alias","messages":[{"role":"user","content":[{"type":"image_url","image_url":{"url":"data:image/png;base64,aGVsbG8="}}]}],"future":{"preserve":true}`
+	for _, fixture := range []struct {
+		suffix string
+		want   string
+	}{
+		{`,"max_completion_tokens":32}`, chatNormal},
+		{`,"stream":true,"max_completion_tokens":32,"stream_options":{"include_usage":true}}`, chatEvents},
+	} {
+		request := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatInput+fixture.suffix))
+		request.Header.Set("Content-Type", "application/json")
+		request.Header.Set("Authorization", "Bearer sk-gateway-key")
+		request.Header.Set("OpenAI-Beta", "test-beta")
+		response := httptest.NewRecorder()
+		r.ServeHTTP(response, request)
+		if response.Code != http.StatusOK || response.Body.String() != fixture.want {
+			t.Fatalf("OpenAI Chat passthrough changed: status %d body %s", response.Code, response.Body.String())
+		}
+	}
+	var chatLogs []model.Log
+	if err := db.Where("channel_id = ? AND type = ?", chatChannel.Id, model.LogTypeConsume).Find(&chatLogs).Error; err != nil || len(chatLogs) != 2 || chatLogs[0].PromptTokens != 4 || chatLogs[1].CompletionTokens != 6 || chatLogs[0].Quota != chatLogs[1].Quota {
+		t.Fatalf("OpenAI Chat usage was not settled consistently: %+v err %v", chatLogs, err)
+	}
+	completionNormal := `{"id":"cmpl-1","choices":[{"text":"ok"}],"usage":{"prompt_tokens":2,"completion_tokens":3},"future":true}`
+	completionEvents := "data: {\"id\":\"cmpl-1\",\"choices\":[{\"text\":\"ok\"}],\"future\":true}\n\n" +
+		"data: {\"id\":\"cmpl-1\",\"choices\":[],\"usage\":{\"prompt_tokens\":2,\"completion_tokens\":3}}\n\n" +
+		"data: [DONE]\n\n"
+	completionServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/completions" || r.Header.Get("Authorization") != "Bearer completion-provider-key" {
+			t.Errorf("Completions upstream route or credential changed: %s %v", r.URL, r.Header)
+		}
+		body, _ := io.ReadAll(r.Body)
+		if !strings.Contains(string(body), `"model":"completion-upstream"`) || !strings.Contains(string(body), `"logprobs":3`) || !strings.Contains(string(body), `"future":{"preserve":true}`) {
+			t.Errorf("Completions request lost fields: %s", body)
+		}
+		if strings.Contains(string(body), `"stream":true`) {
+			w.Header().Set("Content-Type", "text/event-stream")
+			_, _ = io.WriteString(w, completionEvents)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, completionNormal)
+	}))
+	defer completionServer.Close()
+	completionURL, completionMapping := completionServer.URL, `{"completion-alias":"completion-upstream"}`
+	completionChannel := model.Channel{Type: channeltype.OpenAI, Key: "completion-provider-key", Name: "completion", Status: model.ChannelStatusEnabled, Group: "default", Models: "completion-alias", BaseURL: &completionURL, ModelMapping: &completionMapping}
+	if err := completionChannel.Insert(); err != nil {
+		t.Fatal(err)
+	}
+	for _, fixture := range []struct {
+		stream bool
+		want   string
+	}{
+		{false, completionNormal},
+		{true, completionEvents},
+	} {
+		body := `{"model":"completion-alias","prompt":"hello","max_tokens":8,"logprobs":3,"future":{"preserve":true}`
+		if fixture.stream {
+			body += `,"stream":true,"stream_options":{"include_usage":true}`
+		}
+		request := httptest.NewRequest(http.MethodPost, "/v1/completions", strings.NewReader(body+`}`))
+		request.Header.Set("Content-Type", "application/json")
+		request.Header.Set("Authorization", "Bearer sk-gateway-key")
+		response := httptest.NewRecorder()
+		r.ServeHTTP(response, request)
+		if response.Code != http.StatusOK || response.Body.String() != fixture.want {
+			t.Fatalf("Completions passthrough changed: status %d body %s", response.Code, response.Body.String())
+		}
+	}
+	var completionLogs []model.Log
+	if err := db.Where("channel_id = ? AND type = ?", completionChannel.Id, model.LogTypeConsume).Find(&completionLogs).Error; err != nil || len(completionLogs) != 2 || completionLogs[0].PromptTokens != 2 || completionLogs[1].CompletionTokens != 3 {
+		t.Fatalf("Completions usage was not settled: %+v err %v", completionLogs, err)
+	}
+	embeddingBody := `{"object":"list","data":[{"object":"embedding","index":0,"embedding":[0.1,0.2]}],"model":"embedding-upstream","usage":{"prompt_tokens":7,"total_tokens":7},"future":true}`
+	embeddingServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/embeddings" || r.Header.Get("Authorization") != "Bearer embedding-provider-key" {
+			t.Errorf("Embeddings upstream route or credential changed: %s %v", r.URL, r.Header)
+		}
+		body, _ := io.ReadAll(r.Body)
+		if !strings.Contains(string(body), `"model":"embedding-upstream"`) || !strings.Contains(string(body), `"dimensions":2`) || !strings.Contains(string(body), `"future":{"preserve":true}`) {
+			t.Errorf("Embeddings request lost fields: %s", body)
+		}
+		if strings.Contains(string(body), `"fail":true`) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusTooManyRequests)
+			_, _ = io.WriteString(w, `{"error":{"type":"rate_limit_error","message":"slow down"}}`)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, embeddingBody)
+	}))
+	defer embeddingServer.Close()
+	embeddingURL, embeddingMapping := embeddingServer.URL, `{"embedding-alias":"embedding-upstream"}`
+	embeddingChannel := model.Channel{Type: channeltype.OpenAI, Key: "embedding-provider-key", Name: "embedding", Status: model.ChannelStatusEnabled, Group: "default", Models: "embedding-alias", BaseURL: &embeddingURL, ModelMapping: &embeddingMapping}
+	if err := embeddingChannel.Insert(); err != nil {
+		t.Fatal(err)
+	}
+	embeddingRequest := httptest.NewRequest(http.MethodPost, "/v1/embeddings", strings.NewReader(`{"model":"embedding-alias","input":["hello","world"],"dimensions":2,"future":{"preserve":true}}`))
+	embeddingRequest.Header.Set("Content-Type", "application/json")
+	embeddingRequest.Header.Set("Authorization", "Bearer sk-gateway-key")
+	embeddingResponse := httptest.NewRecorder()
+	r.ServeHTTP(embeddingResponse, embeddingRequest)
+	if embeddingResponse.Code != http.StatusOK || embeddingResponse.Body.String() != embeddingBody {
+		t.Fatalf("Embeddings passthrough changed: status %d body %s", embeddingResponse.Code, embeddingResponse.Body.String())
+	}
+	var embeddingLog model.Log
+	if err := db.Where("channel_id = ? AND type = ?", embeddingChannel.Id, model.LogTypeConsume).First(&embeddingLog).Error; err != nil || embeddingLog.PromptTokens != 7 || embeddingLog.CompletionTokens != 0 {
+		t.Fatalf("Embeddings usage was not settled: %+v err %v", embeddingLog, err)
+	}
+	engineRequest := httptest.NewRequest(http.MethodPost, "/v1/engines/embedding-alias/embeddings", strings.NewReader(`{"input":["hello","world"],"dimensions":2,"future":{"preserve":true}}`))
+	engineRequest.Header.Set("Content-Type", "application/json")
+	engineRequest.Header.Set("Authorization", "Bearer sk-gateway-key")
+	engineResponse := httptest.NewRecorder()
+	r.ServeHTTP(engineResponse, engineRequest)
+	if engineResponse.Code != http.StatusOK || engineResponse.Body.String() != embeddingBody {
+		t.Fatalf("engine Embeddings compatibility changed: status %d body %s", engineResponse.Code, engineResponse.Body.String())
+	}
+	engineMismatch := httptest.NewRequest(http.MethodPost, "/v1/engines/embedding-alias/embeddings", strings.NewReader(`{"model":"different","input":"hello"}`))
+	engineMismatch.Header.Set("Content-Type", "application/json")
+	engineMismatch.Header.Set("Authorization", "Bearer sk-gateway-key")
+	engineMismatchResponse := httptest.NewRecorder()
+	r.ServeHTTP(engineMismatchResponse, engineMismatch)
+	if engineMismatchResponse.Code != http.StatusBadRequest {
+		t.Fatalf("engine path/body model mismatch was accepted: status %d body %s", engineMismatchResponse.Code, engineMismatchResponse.Body.String())
+	}
+	quotaBeforeEmbeddingError, err := model.GetUserQuota(user.Id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	embeddingErrorRequest := httptest.NewRequest(http.MethodPost, "/v1/embeddings", strings.NewReader(`{"model":"embedding-alias","input":"hello","dimensions":2,"future":{"preserve":true},"fail":true}`))
+	embeddingErrorRequest.Header.Set("Content-Type", "application/json")
+	embeddingErrorRequest.Header.Set("Authorization", "Bearer sk-gateway-key")
+	embeddingErrorResponse := httptest.NewRecorder()
+	r.ServeHTTP(embeddingErrorResponse, embeddingErrorRequest)
+	quotaAfterEmbeddingError, err := model.GetUserQuota(user.Id)
+	if embeddingErrorResponse.Code != http.StatusTooManyRequests || quotaAfterEmbeddingError != quotaBeforeEmbeddingError || err != nil {
+		t.Fatalf("Embeddings upstream error was billed: status %d before %d after %d err %v", embeddingErrorResponse.Code, quotaBeforeEmbeddingError, quotaAfterEmbeddingError, err)
 	}
 
 	var redirected atomic.Bool

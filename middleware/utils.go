@@ -82,6 +82,9 @@ func getRequestModel(c *gin.Context) (string, error) {
 		}
 	}
 	if strings.HasSuffix(c.Request.URL.Path, "embeddings") {
+		if pathModel := c.Param("model"); pathModel != "" && modelRequest.Model != "" && modelRequest.Model != pathModel {
+			return "", fmt.Errorf("body model does not match the engine path")
+		}
 		if modelRequest.Model == "" {
 			modelRequest.Model = c.Param("model")
 		}

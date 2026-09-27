@@ -32,12 +32,24 @@ tests.
 
 | Client endpoint | Current upstream selection | Current behavior and gap |
 | --- | --- | --- |
-| `POST /v1/chat/completions` | Any configured channel with the model in the user's group | Legacy OpenAI-shaped adaptor path; no common protocol conformance suite. |
+| `POST /v1/chat/completions` | Any configured channel with the model in the user's group | OpenAI channels now use the native lifecycle and preserve same-protocol JSON/SSE; other channel types still use legacy converters. Official SDK conformance remains. |
 | `POST /v1/responses` | OpenAI channels with the model in the user's group | Native synchronous and SSE create, preserving response items and events; requires an explicit `model`. Background mode and retrieval/cancellation routes remain unsupported. |
 | `POST /v1/messages` | Anthropic channels with the model in the user's group | Native request and response forwarding, including SSE, usage, mapping, configured system prompt, and retry before response output; no cross-protocol conversion. |
 | `POST /v1[beta]/models/{model}:generateContent` and `:streamGenerateContent` | Gemini channels with the model in the user's group | Native forwarding on both versions, with retry before response output; no cross-protocol conversion. |
-| Completions, embeddings, image generation, audio, edits, moderation, and proxy routes | Legacy channel selector and adaptors | Registered routes; require separate inventory and conformance fixtures before migration. |
+| Image generation, audio, edits, moderation, and proxy routes | Legacy channel selector and adaptors | Registered routes; require separate conformance fixtures before migration. Completions and both Embeddings entrypoints use the native lifecycle for supported OpenAI channels. |
 | Files, fine-tuning, assistants, and threads | None | Registered placeholders return not implemented. Gemini File, Live, and Interactions have no routes. |
+
+The remaining legacy route inventory is:
+
+| Endpoint | Current implementation | Migration concern |
+| --- | --- | --- |
+| `POST /v1/completions` | Native lifecycle on OpenAI channels without configured system prompt; legacy controller otherwise | Native JSON/SSE, model mapping, extensions, and usage have offline fixtures. |
+| `POST /v1/edits` | Legacy text controller and `GeneralOpenAIRequest` | Request shape and stream handling need separate fixtures. |
+| `POST /v1/embeddings`, `/v1/engines/{model}/embeddings` | Native lifecycle on OpenAI channels; legacy controller on other channel types | OpenAI batch input, extensions, model mapping, large response usage, errors, and engine path model injection have offline fixtures; other channel types need migration. |
+| `POST /v1/moderations` | Legacy text controller and provider adapters | Moderation response semantics need separate fixtures. |
+| `POST /v1/images/generations` | Legacy image controller | Image-specific quota and provider conversions differ from token billing. |
+| `POST /v1/audio/{speech,transcriptions,translations}` | Legacy audio controller | Multipart and binary bodies require a separate transport and billing path. |
+| `/v1/oneapi/proxy/{channelid}/*target` | Legacy proxy controller | Explicit channel selection and arbitrary target paths need an isolated security review. |
 
 Native endpoint tests run against local HTTP upstreams and an in-memory quota
 database. They cover normal and streaming responses, multimodal request fields,
@@ -46,6 +58,8 @@ not establish official SDK conformance or cover the legacy routes.
 
 The Responses create and SSE fixtures follow the [official create reference](https://developers.openai.com/api/reference/go/resources/responses/methods/create)
 and [streaming event reference](https://developers.openai.com/api/reference/resources/responses/streaming-events).
+The Embeddings usage fixture follows the [official embeddings guide](https://developers.openai.com/api/docs/guides/embeddings).
+The legacy Completions fixture follows the [official Completions reference](https://developers.openai.com/api/reference/cli/resources/completions).
 
 ## Phases and acceptance gates
 
@@ -95,6 +109,8 @@ and [streaming event reference](https://developers.openai.com/api/reference/reso
   already started.
 - [ ] Move request metadata, compatible-channel selection, retry policy, quota
   reservation/settlement, and error mapping into one protocol-neutral layer.
+  Initial selection and retry for native routes now live in `relay/lifecycle`;
+  legacy routes and request metadata still need migration.
 - [ ] Remove direct dependencies on Gin and `GeneralOpenAIRequest` from provider
   conversion interfaces.
 - [ ] Gate: a cancellation, upstream error, retry, or stream completion settles
@@ -103,7 +119,7 @@ and [streaming event reference](https://developers.openai.com/api/reference/reso
 ### 3. OpenAI Chat and Anthropic Messages
 
 - [ ] Move Chat Completions onto the new lifecycle, preserving same-protocol
-  passthrough.
+  passthrough. OpenAI channels are migrated; converted channel types remain.
 - [ ] Add explicit Chat Completions <-> Messages converters, including tools,
   content blocks, thinking, stop reasons, errors, usage, and SSE state.
 - [ ] Gate: official OpenAI and Anthropic clients pass the common offline suite.
@@ -144,8 +160,9 @@ forwarding remains the default for same-protocol requests.
   Anthropic clients may also use `x-api-key`, and Gemini clients may use
   `x-goog-api-key`. The gateway replaces these credentials before forwarding.
 - Native routes currently require a matching Anthropic, Gemini, or OpenAI
-  channel in the caller's group. Existing OpenAI Chat and other OpenAI-shaped
-  routes continue using the legacy adapters during migration.
+  channel in the caller's group. OpenAI Chat now uses the native lifecycle on
+  OpenAI channels; other OpenAI-shaped routes and Chat requests selected onto
+  other channel types still use the legacy adapters during migration.
 - Phase 0: inventory started; offline fixtures now cover native request
   preservation, SSE preservation, credential substitution, channel selection,
   upstream errors, multimodal input, cancellation, and quota settlement.
@@ -157,8 +174,18 @@ forwarding remains the default for same-protocol requests.
   Configured system prompts use each protocol's native field. Retry can select
   another matching channel before any response is forwarded. Cross-protocol
   routing and native File/Live/Interactions endpoints remain.
-- Phase 2: native request execution now runs in a Gin-free lifecycle package.
-  Legacy routes still need migration before the lifecycle is fully shared.
+- Phase 2: native request execution, initial compatible-channel selection,
+  retry, and quota settlement now run in a Gin-free lifecycle package. Legacy
+  routes still need migration before the lifecycle is fully shared.
+- Phase 3: OpenAI channels now route Chat Completions through the native
+  lifecycle. The path preserves unmapped JSON and SSE bytes, replaces upstream
+  credentials, applies model and system prompt configuration, retries before
+  output, and settles provider-reported Chat usage. Other channel types still
+  use legacy converters; official client fixtures and cross-protocol converters
+  remain.
 - Phase 4: native Gemini routing is in place; client conformance and conversions
-  remain. Phase 5 has a native Responses create route, while background and
-  other response operations remain. Phase 3 is pending.
+  remain. Phase 5 has a native Responses create route, OpenAI-channel
+  Embeddings routes, and OpenAI-channel legacy Completions route when no forced
+  system prompt is configured. Large non-streaming responses now forward while
+  parsing usage without buffering the full body. Background Responses and
+  other operations remain.

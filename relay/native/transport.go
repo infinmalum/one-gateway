@@ -14,9 +14,12 @@ import (
 type Protocol string
 
 const (
-	Anthropic       Protocol = "anthropic"
-	Gemini          Protocol = "gemini"
-	OpenAIResponses Protocol = "openai_responses"
+	Anthropic         Protocol = "anthropic"
+	Gemini            Protocol = "gemini"
+	OpenAIChat        Protocol = "openai_chat"
+	OpenAICompletions Protocol = "openai_completions"
+	OpenAIEmbeddings  Protocol = "openai_embeddings"
+	OpenAIResponses   Protocol = "openai_responses"
 )
 
 type Request struct {
@@ -80,6 +83,24 @@ func BuildRequest(ctx context.Context, input Request) (*http.Request, error) {
 		if err != nil {
 			return nil, err
 		}
+	case OpenAIChat:
+		path = "/v1/chat/completions"
+		body, stream, err = prepareOpenAIChatBody(body, input.Model, input.SystemPrompt)
+		if err != nil {
+			return nil, err
+		}
+	case OpenAIEmbeddings:
+		path = "/v1/embeddings"
+		body, err = prepareOpenAIEmbeddingsBody(body, input.Model)
+		if err != nil {
+			return nil, err
+		}
+	case OpenAICompletions:
+		path = "/v1/completions"
+		body, stream, err = prepareOpenAICompletionsBody(body, input.Model)
+		if err != nil {
+			return nil, err
+		}
 	default:
 		return nil, errors.New("unsupported native protocol")
 	}
@@ -118,13 +139,102 @@ func BuildRequest(ctx context.Context, input Request) (*http.Request, error) {
 		}
 	case Gemini:
 		req.Header.Set("x-goog-api-key", input.APIKey)
-	case OpenAIResponses:
+	case OpenAIResponses, OpenAIChat, OpenAICompletions, OpenAIEmbeddings:
 		req.Header.Set("Authorization", "Bearer "+input.APIKey)
 		if beta := input.Headers.Get("OpenAI-Beta"); beta != "" {
 			req.Header.Set("OpenAI-Beta", beta)
 		}
 	}
 	return req, nil
+}
+
+func prepareOpenAICompletionsBody(body []byte, model string) ([]byte, bool, error) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(body, &fields); err != nil || fields == nil {
+		return nil, false, errors.New("invalid OpenAI Completions JSON request")
+	}
+	var requestedModel string
+	if err := json.Unmarshal(fields["model"], &requestedModel); err != nil || requestedModel == "" {
+		return nil, false, errors.New("OpenAI Completions model is required")
+	}
+	if len(fields["prompt"]) == 0 || string(fields["prompt"]) == "null" {
+		return nil, false, errors.New("OpenAI Completions prompt is required")
+	}
+	var stream bool
+	if raw, ok := fields["stream"]; ok && json.Unmarshal(raw, &stream) != nil {
+		return nil, false, errors.New("OpenAI Completions stream must be boolean")
+	}
+	if model == "" || model == requestedModel {
+		return body, stream, nil
+	}
+	fields["model"], _ = json.Marshal(model)
+	updated, err := json.Marshal(fields)
+	return updated, stream, err
+}
+
+func prepareOpenAIEmbeddingsBody(body []byte, model string) ([]byte, error) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(body, &fields); err != nil || fields == nil {
+		return nil, errors.New("invalid OpenAI Embeddings JSON request")
+	}
+	var requestedModel string
+	if err := json.Unmarshal(fields["model"], &requestedModel); err != nil || requestedModel == "" {
+		return nil, errors.New("OpenAI Embeddings model is required")
+	}
+	if model == "" || model == requestedModel {
+		return body, nil
+	}
+	fields["model"], _ = json.Marshal(model)
+	return json.Marshal(fields)
+}
+
+func prepareOpenAIChatBody(body []byte, model, systemPrompt string) ([]byte, bool, error) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(body, &fields); err != nil || fields == nil {
+		return nil, false, errors.New("invalid OpenAI Chat JSON request")
+	}
+	var requestedModel string
+	if err := json.Unmarshal(fields["model"], &requestedModel); err != nil || requestedModel == "" {
+		return nil, false, errors.New("OpenAI Chat model is required")
+	}
+	var stream bool
+	if raw, ok := fields["stream"]; ok {
+		if err := json.Unmarshal(raw, &stream); err != nil {
+			return nil, false, errors.New("OpenAI Chat stream must be boolean")
+		}
+	}
+	if (model == "" || model == requestedModel) && systemPrompt == "" {
+		return body, stream, nil
+	}
+	if model != "" && model != requestedModel {
+		fields["model"], _ = json.Marshal(model)
+	}
+	if systemPrompt != "" {
+		var messages []json.RawMessage
+		if err := json.Unmarshal(fields["messages"], &messages); err != nil || messages == nil {
+			return nil, false, errors.New("OpenAI Chat messages must be an array")
+		}
+		instruction, _ := json.Marshal(map[string]string{"role": "system", "content": systemPrompt})
+		if len(messages) > 0 {
+			var first map[string]json.RawMessage
+			if json.Unmarshal(messages[0], &first) == nil {
+				var role string
+				if json.Unmarshal(first["role"], &role) == nil && role == "system" {
+					first["content"], _ = json.Marshal(systemPrompt)
+					messages[0], _ = json.Marshal(first)
+				} else {
+					messages = append([]json.RawMessage{instruction}, messages...)
+				}
+			} else {
+				messages = append([]json.RawMessage{instruction}, messages...)
+			}
+		} else {
+			messages = append(messages, instruction)
+		}
+		fields["messages"], _ = json.Marshal(messages)
+	}
+	updated, err := json.Marshal(fields)
+	return updated, stream, err
 }
 
 func prepareAnthropicBody(body []byte, model, systemPrompt string) ([]byte, bool, error) {

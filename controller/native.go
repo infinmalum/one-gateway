@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -45,6 +46,90 @@ func NativeOpenAIResponses(c *gin.Context) {
 		return
 	}
 	forwardNative(c, nativeInput{protocol: native.OpenAIResponses, model: fields.Model, stream: fields.Stream, maxOutputTokens: fields.MaxOutputTokens, body: body})
+}
+
+// NativeOpenAIChat forwards OpenAI channels without the legacy Chat adapter.
+// Other channel types still use their existing conversion path.
+func NativeOpenAIChat(c *gin.Context) {
+	body, err := common.GetRequestBody(c)
+	if err != nil {
+		writeNativeError(c, native.OpenAIChat, http.StatusBadRequest, err)
+		return
+	}
+	var fields struct {
+		Model         string          `json:"model"`
+		Messages      json.RawMessage `json:"messages"`
+		Stream        bool            `json:"stream"`
+		MaxTokens     int64           `json:"max_tokens"`
+		MaxCompletion int64           `json:"max_completion_tokens"`
+	}
+	if err := json.Unmarshal(body, &fields); err != nil || fields.Model == "" || len(fields.Messages) == 0 || fields.MaxTokens < 0 || fields.MaxCompletion < 0 {
+		writeNativeError(c, native.OpenAIChat, http.StatusBadRequest, errors.New("model and messages are required; token limits must not be negative"))
+		return
+	}
+	forwardNative(c, nativeInput{protocol: native.OpenAIChat, model: fields.Model, stream: fields.Stream,
+		maxOutputTokens: max(fields.MaxTokens, fields.MaxCompletion), body: body})
+}
+
+func NativeOpenAIEmbeddings(c *gin.Context) {
+	body, err := common.GetRequestBody(c)
+	if err != nil {
+		writeNativeError(c, native.OpenAIEmbeddings, http.StatusBadRequest, err)
+		return
+	}
+	var fields struct {
+		Model string          `json:"model"`
+		Input json.RawMessage `json:"input"`
+	}
+	if err := json.Unmarshal(body, &fields); err != nil || len(fields.Input) == 0 || string(fields.Input) == "null" {
+		writeNativeError(c, native.OpenAIEmbeddings, http.StatusBadRequest, errors.New("model and input are required"))
+		return
+	}
+	if c.Param("model") != "" {
+		if fields.Model != "" && fields.Model != c.Param("model") {
+			writeNativeError(c, native.OpenAIEmbeddings, http.StatusBadRequest, errors.New("body model does not match the engine path"))
+			return
+		}
+		fields.Model = c.Param("model")
+		if len(body) > 0 {
+			var payload map[string]json.RawMessage
+			if err := json.Unmarshal(body, &payload); err != nil || payload == nil {
+				writeNativeError(c, native.OpenAIEmbeddings, http.StatusBadRequest, errors.New("invalid embeddings request"))
+				return
+			}
+			payload["model"], _ = json.Marshal(fields.Model)
+			body, _ = json.Marshal(payload)
+		}
+	}
+	if fields.Model == "" {
+		writeNativeError(c, native.OpenAIEmbeddings, http.StatusBadRequest, errors.New("model is required"))
+		return
+	}
+	// Embeddings have no output-token limit. Reserve against the input byte
+	// length so an unusually large response without parseable usage cannot
+	// leave only the small default reservation charged.
+	forwardNative(c, nativeInput{protocol: native.OpenAIEmbeddings, model: fields.Model,
+		maxOutputTokens: int64(len(body)), body: body})
+}
+
+func NativeOpenAICompletions(c *gin.Context) {
+	body, err := common.GetRequestBody(c)
+	if err != nil {
+		writeNativeError(c, native.OpenAICompletions, http.StatusBadRequest, err)
+		return
+	}
+	var fields struct {
+		Model     string          `json:"model"`
+		Prompt    json.RawMessage `json:"prompt"`
+		Stream    bool            `json:"stream"`
+		MaxTokens int64           `json:"max_tokens"`
+	}
+	if err := json.Unmarshal(body, &fields); err != nil || fields.Model == "" || len(fields.Prompt) == 0 || string(fields.Prompt) == "null" || fields.MaxTokens < 0 {
+		writeNativeError(c, native.OpenAICompletions, http.StatusBadRequest, errors.New("model and prompt are required; max_tokens must not be negative"))
+		return
+	}
+	forwardNative(c, nativeInput{protocol: native.OpenAICompletions, model: fields.Model,
+		stream: fields.Stream, maxOutputTokens: fields.MaxTokens, body: body})
 }
 
 func NativeAnthropic(c *gin.Context) {
@@ -102,7 +187,16 @@ func forwardNative(c *gin.Context, input nativeInput) {
 	if input.protocol == native.Gemini {
 		version = strings.SplitN(strings.TrimPrefix(c.Request.URL.Path, "/"), "/", 2)[0]
 	}
-	_, specificChannel := c.Get(ctxkey.SpecificChannelId)
+	specificValue, specificChannel := c.Get(ctxkey.SpecificChannelId)
+	specificChannelID := 0
+	if specificChannel {
+		var err error
+		specificChannelID, err = strconv.Atoi(specificValue.(string))
+		if err != nil || specificChannelID <= 0 {
+			writeNativeError(c, input.protocol, http.StatusBadRequest, errors.New("invalid channel ID"))
+			return
+		}
+	}
 	result := lifecycle.Forward(c.Request.Context(), c.Writer, lifecycle.Request{
 		Protocol: input.protocol, Model: input.model, Action: input.action,
 		Version: version, Stream: input.stream, MaxOutputTokens: input.maxOutputTokens,
@@ -116,7 +210,7 @@ func forwardNative(c *gin.Context, input nativeInput) {
 		Principal: lifecycle.Principal{
 			UserID: metadata.UserId, TokenID: metadata.TokenId,
 			TokenName: metadata.TokenName, Group: metadata.Group,
-			SpecificChannel: specificChannel,
+			SpecificChannel: specificChannel, SpecificChannelID: specificChannelID,
 		},
 		RetryLimit: config.RetryTimes,
 	})

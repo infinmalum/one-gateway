@@ -29,11 +29,12 @@ type Channel struct {
 }
 
 type Principal struct {
-	UserID          int
-	TokenID         int
-	TokenName       string
-	Group           string
-	SpecificChannel bool
+	UserID            int
+	TokenID           int
+	TokenName         string
+	Group             string
+	SpecificChannel   bool
+	SpecificChannelID int
 }
 
 type Request struct {
@@ -61,6 +62,20 @@ type HTTPError struct {
 // response copying, and settlement; the caller owns request parsing and the
 // client protocol's error envelope.
 func Forward(ctx context.Context, dst http.ResponseWriter, input Request) *HTTPError {
+	if input.Principal.Group == "" {
+		group, err := model.CacheGetUserGroup(input.Principal.UserID)
+		if err != nil {
+			return &HTTPError{http.StatusInternalServerError, "failed to load user group"}
+		}
+		input.Principal.Group = group
+	}
+	if input.Channel.ID == 0 {
+		selected, err := selectInitial(input)
+		if err != nil {
+			return err
+		}
+		input.Channel = selected
+	}
 	httpClient := input.HTTPClient
 	if httpClient == nil {
 		httpClient = client.HTTPClient
@@ -151,6 +166,60 @@ func Forward(ctx context.Context, dst http.ResponseWriter, input Request) *HTTPE
 			logger.Errorf(settlementContext, "upstream response interrupted on channel %d: %v", channel.ID, copyErr)
 		}
 		return nil
+	}
+}
+
+func selectInitial(input Request) (Channel, *HTTPError) {
+	requiredType := requiredChannelType(input.Protocol)
+	if requiredType < 0 {
+		return Channel{}, &HTTPError{http.StatusBadRequest, "unsupported native protocol"}
+	}
+	var selected *model.Channel
+	var err error
+	if input.Principal.SpecificChannel {
+		if input.Principal.SpecificChannelID <= 0 {
+			return Channel{}, &HTTPError{http.StatusBadRequest, "invalid channel ID"}
+		}
+		selected, err = model.GetChannelById(input.Principal.SpecificChannelID, true)
+		if err != nil || selected == nil {
+			return Channel{}, &HTTPError{http.StatusBadRequest, "invalid channel ID"}
+		}
+		if selected.Status != model.ChannelStatusEnabled {
+			return Channel{}, &HTTPError{http.StatusForbidden, "selected channel is disabled"}
+		}
+		if selected.Type != requiredType {
+			return Channel{}, &HTTPError{http.StatusBadRequest, "selected channel does not support this protocol"}
+		}
+	} else {
+		selected, err = model.GetRandomSatisfiedChannelByType(input.Principal.Group, input.Model, requiredType, false)
+		if err != nil || selected == nil {
+			label := "OpenAI"
+			switch input.Protocol {
+			case native.Anthropic:
+				label = "Anthropic"
+			case native.Gemini:
+				label = "Gemini"
+			}
+			return Channel{}, &HTTPError{http.StatusServiceUnavailable, "no compatible " + label + " channel for this model"}
+		}
+	}
+	channel, err := channelFromModel(selected)
+	if err != nil {
+		return Channel{}, &HTTPError{http.StatusInternalServerError, "failed to load channel configuration"}
+	}
+	return channel, nil
+}
+
+func requiredChannelType(protocol native.Protocol) int {
+	switch protocol {
+	case native.Anthropic:
+		return channeltype.Anthropic
+	case native.Gemini:
+		return channeltype.Gemini
+	case native.OpenAIChat, native.OpenAICompletions, native.OpenAIEmbeddings, native.OpenAIResponses:
+		return channeltype.OpenAI
+	default:
+		return -1
 	}
 }
 
