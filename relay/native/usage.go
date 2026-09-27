@@ -31,6 +31,11 @@ type geminiUsage struct {
 	TotalTokenCount      int64 `json:"totalTokenCount"`
 }
 
+type openAIUsage struct {
+	InputTokens  int64 `json:"input_tokens"`
+	OutputTokens int64 `json:"output_tokens"`
+}
+
 func (u *Usage) observe(protocol Protocol, data []byte) {
 	switch protocol {
 	case Anthropic:
@@ -72,6 +77,30 @@ func (u *Usage) observe(protocol Protocol, data []byte) {
 		}
 		u.Output = max(u.Output, output)
 		u.Seen = true
+	case OpenAIResponses:
+		var result struct {
+			Type     string       `json:"type"`
+			Usage    *openAIUsage `json:"usage"`
+			Response *struct {
+				Usage *openAIUsage `json:"usage"`
+			} `json:"response"`
+		}
+		if json.Unmarshal(data, &result) != nil {
+			return
+		}
+		switch result.Type {
+		case "response.completed", "response.failed", "response.incomplete":
+			u.Complete = true
+		}
+		usage := result.Usage
+		if result.Response != nil && result.Response.Usage != nil {
+			usage = result.Response.Usage
+		}
+		if usage != nil {
+			u.Input = max(u.Input, usage.InputTokens)
+			u.Output = max(u.Output, usage.OutputTokens)
+			u.Seen = true
+		}
 	}
 }
 

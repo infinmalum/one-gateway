@@ -65,6 +65,11 @@ func distribute(requiredChannelType int) func(c *gin.Context) {
 			}
 			if err != nil {
 				message := fmt.Sprintf("当前分组 %s 下对于模型 %s 无可用渠道", userGroup, requestModel)
+				if requiredChannelType == channeltype.Anthropic {
+					message = fmt.Sprintf("当前分组 %s 下模型 %s 没有支持 Anthropic 原生协议的可用渠道", userGroup, requestModel)
+				} else if requiredChannelType == channeltype.Gemini {
+					message = fmt.Sprintf("当前分组 %s 下模型 %s 没有支持 Gemini 原生协议的可用渠道", userGroup, requestModel)
+				}
 				if channel != nil {
 					logger.SysError(fmt.Sprintf("渠道不存在：%d", channel.Id))
 					message = "数据库一致性已被破坏，请联系管理员"

@@ -14,20 +14,22 @@ import (
 type Protocol string
 
 const (
-	Anthropic Protocol = "anthropic"
-	Gemini    Protocol = "gemini"
+	Anthropic       Protocol = "anthropic"
+	Gemini          Protocol = "gemini"
+	OpenAIResponses Protocol = "openai_responses"
 )
 
 type Request struct {
-	Protocol Protocol
-	BaseURL  string
-	Version  string
-	Model    string
-	Action   string
-	APIKey   string
-	Body     []byte
-	Headers  http.Header
-	Query    url.Values
+	Protocol     Protocol
+	BaseURL      string
+	Version      string
+	Model        string
+	Action       string
+	APIKey       string
+	SystemPrompt string
+	Body         []byte
+	Headers      http.Header
+	Query        url.Values
 }
 
 // BuildRequest changes only the fields required to reach the selected upstream.
@@ -46,7 +48,7 @@ func BuildRequest(ctx context.Context, input Request) (*http.Request, error) {
 	switch input.Protocol {
 	case Anthropic:
 		path = "/v1/messages"
-		body, stream, err = prepareAnthropicBody(body, input.Model)
+		body, stream, err = prepareAnthropicBody(body, input.Model, input.SystemPrompt)
 		if err != nil {
 			return nil, err
 		}
@@ -66,6 +68,18 @@ func BuildRequest(ctx context.Context, input Request) (*http.Request, error) {
 		}
 		path = fmt.Sprintf("/%s/models/%s:%s", version, url.PathEscape(input.Model), input.Action)
 		stream = input.Action == "streamGenerateContent"
+		if input.SystemPrompt != "" {
+			body, err = prepareGeminiBody(body, input.SystemPrompt)
+			if err != nil {
+				return nil, err
+			}
+		}
+	case OpenAIResponses:
+		path = "/v1/responses"
+		body, stream, err = prepareOpenAIResponsesBody(body, input.Model, input.SystemPrompt)
+		if err != nil {
+			return nil, err
+		}
 	default:
 		return nil, errors.New("unsupported native protocol")
 	}
@@ -104,11 +118,16 @@ func BuildRequest(ctx context.Context, input Request) (*http.Request, error) {
 		}
 	case Gemini:
 		req.Header.Set("x-goog-api-key", input.APIKey)
+	case OpenAIResponses:
+		req.Header.Set("Authorization", "Bearer "+input.APIKey)
+		if beta := input.Headers.Get("OpenAI-Beta"); beta != "" {
+			req.Header.Set("OpenAI-Beta", beta)
+		}
 	}
 	return req, nil
 }
 
-func prepareAnthropicBody(body []byte, model string) ([]byte, bool, error) {
+func prepareAnthropicBody(body []byte, model, systemPrompt string) ([]byte, bool, error) {
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(body, &fields); err != nil || fields == nil {
 		return nil, false, errors.New("invalid Anthropic JSON request")
@@ -123,14 +142,72 @@ func prepareAnthropicBody(body []byte, model string) ([]byte, bool, error) {
 			return nil, false, errors.New("Anthropic stream must be boolean")
 		}
 	}
-	if model == "" || model == requestedModel {
+	if (model == "" || model == requestedModel) && systemPrompt == "" {
 		return body, stream, nil
 	}
-	encoded, err := json.Marshal(model)
-	if err != nil {
-		return nil, false, err
+	if model != "" && model != requestedModel {
+		encoded, err := json.Marshal(model)
+		if err != nil {
+			return nil, false, err
+		}
+		fields["model"] = encoded
 	}
-	fields["model"] = encoded
-	body, err = json.Marshal(fields)
+	if systemPrompt != "" {
+		encoded, err := json.Marshal(systemPrompt)
+		if err != nil {
+			return nil, false, err
+		}
+		fields["system"] = encoded
+	}
+	body, err := json.Marshal(fields)
 	return body, stream, err
+}
+
+func prepareGeminiBody(body []byte, systemPrompt string) ([]byte, error) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(body, &fields); err != nil || fields == nil {
+		return nil, errors.New("invalid Gemini JSON request")
+	}
+	instruction, err := json.Marshal(map[string]any{"parts": []map[string]string{{"text": systemPrompt}}})
+	if err != nil {
+		return nil, err
+	}
+	fields["systemInstruction"] = instruction
+	return json.Marshal(fields)
+}
+
+func prepareOpenAIResponsesBody(body []byte, model, instructions string) ([]byte, bool, error) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(body, &fields); err != nil || fields == nil {
+		return nil, false, errors.New("invalid OpenAI Responses JSON request")
+	}
+	var requestedModel string
+	if err := json.Unmarshal(fields["model"], &requestedModel); err != nil || requestedModel == "" {
+		return nil, false, errors.New("OpenAI Responses model is required")
+	}
+	var stream bool
+	if raw, ok := fields["stream"]; ok {
+		if err := json.Unmarshal(raw, &stream); err != nil {
+			return nil, false, errors.New("OpenAI Responses stream must be boolean")
+		}
+	}
+	if (model == "" || model == requestedModel) && instructions == "" {
+		return body, stream, nil
+	}
+	if model != "" && model != requestedModel {
+		encoded, err := json.Marshal(model)
+		if err != nil {
+			return nil, false, err
+		}
+		fields["model"] = encoded
+	}
+	if instructions != "" {
+		encoded, err := json.Marshal(instructions)
+		if err != nil {
+			return nil, false, err
+		}
+		fields["instructions"] = encoded
+	}
+	updated, err := json.Marshal(fields)
+	return updated, stream, err
 }

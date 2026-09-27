@@ -11,6 +11,9 @@ import (
 func SetRelayRouter(router *gin.Engine) {
 	router.Use(middleware.CORS())
 	router.Use(middleware.GzipDecodeMiddleware())
+	nativeOpenAI := router.Group("/v1")
+	nativeOpenAI.Use(middleware.RelayPanicRecover(), middleware.TokenAuth(), middleware.DistributeChannelType(channeltype.OpenAI))
+	nativeOpenAI.POST("/responses", controller.NativeOpenAIResponses)
 	nativeAnthropic := router.Group("/v1")
 	nativeAnthropic.Use(middleware.RelayPanicRecover(), middleware.TokenAuth(), middleware.DistributeChannelType(channeltype.Anthropic))
 	nativeAnthropic.POST("/messages", controller.NativeAnthropic)

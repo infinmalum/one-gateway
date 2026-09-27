@@ -184,7 +184,7 @@ func shouldCheckModel(c *gin.Context) bool {
 	if strings.HasPrefix(c.Request.URL.Path, "/v1/audio") {
 		return true
 	}
-	if c.Request.URL.Path == "/v1/messages" || isNativeGeminiRequest(c) {
+	if c.Request.URL.Path == "/v1/messages" || c.Request.URL.Path == "/v1/responses" || isNativeGeminiRequest(c) {
 		return true
 	}
 	return false

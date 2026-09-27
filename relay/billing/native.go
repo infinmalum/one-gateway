@@ -15,18 +15,19 @@ import (
 )
 
 type NativeReservation struct {
-	UserID          int
-	TokenID         int
-	ChannelID       int
-	ChannelType     int
-	TokenName       string
-	ModelName       string
-	Group           string
-	Reserved        int64
-	ModelRatio      float64
-	GroupRatio      float64
-	CompletionRatio float64
-	StartedAt       time.Time
+	UserID            int
+	TokenID           int
+	ChannelID         int
+	ChannelType       int
+	TokenName         string
+	ModelName         string
+	Group             string
+	Reserved          int64
+	ModelRatio        float64
+	GroupRatio        float64
+	CompletionRatio   float64
+	SystemPromptReset bool
+	StartedAt         time.Time
 }
 
 // ReserveNativeQuota uses the provider's output limit plus the configured
@@ -115,16 +116,17 @@ func (r *NativeReservation) Settle(ctx context.Context, usage native.Usage, stre
 		content += "; stream interrupted"
 	}
 	model.RecordConsumeLog(ctx, &model.Log{
-		UserId:           r.UserID,
-		ChannelId:        r.ChannelID,
-		PromptTokens:     int(usage.Input),
-		CompletionTokens: int(usage.Output),
-		ModelName:        r.ModelName,
-		TokenName:        r.TokenName,
-		Quota:            int(quota),
-		Content:          content,
-		IsStream:         streamed,
-		ElapsedTime:      time.Since(r.StartedAt).Milliseconds(),
+		UserId:            r.UserID,
+		ChannelId:         r.ChannelID,
+		PromptTokens:      int(usage.Input),
+		CompletionTokens:  int(usage.Output),
+		ModelName:         r.ModelName,
+		TokenName:         r.TokenName,
+		Quota:             int(quota),
+		Content:           content,
+		IsStream:          streamed,
+		ElapsedTime:       time.Since(r.StartedAt).Milliseconds(),
+		SystemPromptReset: r.SystemPromptReset,
 	})
 	model.UpdateUserUsedQuotaAndRequestCount(r.UserID, quota)
 	model.UpdateChannelUsedQuota(r.ChannelID, quota)
