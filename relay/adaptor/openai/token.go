@@ -67,7 +67,7 @@ func getTokenEncoder(model string) *tiktoken.Tiktoken {
 }
 
 func getTokenNum(tokenEncoder *tiktoken.Tiktoken, text string) int {
-	if config.ApproximateTokenEnabled {
+	if config.ApproximateTokenEnabled || tokenEncoder == nil {
 		return int(float64(len(text)) * 0.38)
 	}
 	return len(tokenEncoder.Encode(text, nil, nil))

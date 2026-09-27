@@ -85,6 +85,9 @@ func preConsumeQuota(ctx context.Context, textRequest *relaymodel.GeneralOpenAIR
 			if refundErr := model.PostConsumeTokenQuota(meta.TokenId, -preConsumedQuota); refundErr != nil {
 				logger.Error(ctx, "failed to refund reserved quota: "+refundErr.Error())
 			}
+			if refreshErr := model.CacheRefreshUserQuota(context.WithoutCancel(ctx), meta.UserId); refreshErr != nil {
+				logger.Error(ctx, "failed to refresh user quota after refund: "+refreshErr.Error())
+			}
 			return preConsumedQuota, openai.ErrorWrapper(err, "decrease_user_quota_failed", http.StatusInternalServerError)
 		}
 	}
@@ -114,8 +117,9 @@ func postConsumeQuota(ctx context.Context, usage *relaymodel.Usage, meta *meta.M
 	err := model.PostConsumeTokenQuota(meta.TokenId, quotaDelta)
 	if err != nil {
 		logger.Error(ctx, "error consuming token remain quota: "+err.Error())
+		quota = preConsumedQuota
 	}
-	err = model.CacheUpdateUserQuota(ctx, meta.UserId)
+	err = model.CacheRefreshUserQuota(ctx, meta.UserId)
 	if err != nil {
 		logger.Error(ctx, "error update user quota cache: "+err.Error())
 	}

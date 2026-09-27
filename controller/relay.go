@@ -82,6 +82,7 @@ func Relay(c *gin.Context) {
 		c.Request.Body = io.NopCloser(bytes.NewBuffer(requestBody))
 		bizErr = relayHelper(c, relayMode)
 		if bizErr == nil {
+			monitor.Emit(c.GetInt(ctxkey.ChannelId), true)
 			return
 		}
 		channelId := c.GetInt(ctxkey.ChannelId)
@@ -90,6 +91,9 @@ func Relay(c *gin.Context) {
 		go processChannelRelayError(ctx, userId, channelId, channelName, *bizErr)
 	}
 	if bizErr != nil {
+		if c.Writer.Written() {
+			return
+		}
 		if bizErr.StatusCode == http.StatusTooManyRequests {
 			bizErr.Error.Message = "当前分组上游负载已饱和，请稍后再试"
 		}
@@ -103,6 +107,9 @@ func Relay(c *gin.Context) {
 }
 
 func shouldRetry(c *gin.Context, statusCode int) bool {
+	if c.Writer.Written() {
+		return false
+	}
 	if _, ok := c.Get(ctxkey.SpecificChannelId); ok {
 		return false
 	}

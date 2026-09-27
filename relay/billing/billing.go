@@ -8,15 +8,16 @@ import (
 	"github.com/infinmalum/one-gateway/model"
 )
 
-func ReturnPreConsumedQuota(ctx context.Context, preConsumedQuota int64, tokenId int) {
-	if preConsumedQuota != 0 {
-		go func(ctx context.Context) {
-			// return pre-consumed quota
-			err := model.PostConsumeTokenQuota(tokenId, -preConsumedQuota)
-			if err != nil {
-				logger.Error(ctx, "error return pre-consumed quota: "+err.Error())
-			}
-		}(ctx)
+func ReturnPreConsumedQuota(ctx context.Context, preConsumedQuota int64, tokenId, userId int) {
+	if preConsumedQuota == 0 {
+		return
+	}
+	ctx = context.WithoutCancel(ctx)
+	if err := model.PostConsumeTokenQuota(tokenId, -preConsumedQuota); err != nil {
+		logger.Error(ctx, "error return pre-consumed quota: "+err.Error())
+	}
+	if err := model.CacheRefreshUserQuota(ctx, userId); err != nil {
+		logger.Error(ctx, "error refresh user quota after refund: "+err.Error())
 	}
 }
 
@@ -26,7 +27,7 @@ func PostConsumeQuota(ctx context.Context, tokenId int, quotaDelta int64, totalQ
 	if err != nil {
 		logger.SysError("error consuming token remain quota: " + err.Error())
 	}
-	err = model.CacheUpdateUserQuota(ctx, userId)
+	err = model.CacheRefreshUserQuota(ctx, userId)
 	if err != nil {
 		logger.SysError("error update user quota cache: " + err.Error())
 	}

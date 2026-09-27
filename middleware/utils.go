@@ -1,11 +1,13 @@
 package middleware
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/infinmalum/one-gateway/common"
 	"github.com/infinmalum/one-gateway/common/helper"
 	"github.com/infinmalum/one-gateway/common/logger"
+	"github.com/infinmalum/one-gateway/relay/native"
 	"net/http"
 	"strings"
 )
@@ -13,27 +15,19 @@ import (
 func abortWithMessage(c *gin.Context, statusCode int, message string) {
 	path := c.Request.URL.Path
 	if path == "/v1/messages" {
-		kind := "invalid_request_error"
-		if statusCode == 401 {
-			kind = "authentication_error"
-		} else if statusCode >= 500 {
-			kind = "api_error"
-		}
-		c.JSON(statusCode, gin.H{"type": "error", "error": gin.H{"type": kind, "message": message}})
+		c.JSON(statusCode, native.ErrorBody(native.Anthropic, statusCode, message))
+		c.Abort()
+		logger.Error(c.Request.Context(), message)
+		return
+	}
+	if path == "/v1/responses" {
+		c.JSON(statusCode, native.ErrorBody(native.OpenAIResponses, statusCode, message))
 		c.Abort()
 		logger.Error(c.Request.Context(), message)
 		return
 	}
 	if isNativeGeminiRequest(c) {
-		status := "INVALID_ARGUMENT"
-		if statusCode == 401 {
-			status = "UNAUTHENTICATED"
-		} else if statusCode == 403 {
-			status = "PERMISSION_DENIED"
-		} else if statusCode >= 500 {
-			status = "UNAVAILABLE"
-		}
-		c.JSON(statusCode, gin.H{"error": gin.H{"code": statusCode, "message": message, "status": status}})
+		c.JSON(statusCode, native.ErrorBody(native.Gemini, statusCode, message))
 		c.Abort()
 		logger.Error(c.Request.Context(), message)
 		return
@@ -54,6 +48,29 @@ func isNativeGeminiRequest(c *gin.Context) bool {
 }
 
 func getRequestModel(c *gin.Context) (string, error) {
+	if isNativeGeminiRequest(c) {
+		modelAction := c.Param("modelAction")
+		if separator := strings.LastIndexByte(modelAction, ':'); separator > 0 {
+			return modelAction[:separator], nil
+		}
+		return "", fmt.Errorf("Gemini model and action are required")
+	}
+	if c.Request.URL.Path == "/v1/messages" || c.Request.URL.Path == "/v1/responses" {
+		body, err := common.GetRequestBody(c)
+		if err != nil {
+			return "", err
+		}
+		var request struct {
+			Model string `json:"model"`
+		}
+		if err := json.Unmarshal(body, &request); err != nil {
+			return "", err
+		}
+		if request.Model == "" {
+			return "", fmt.Errorf("model is required")
+		}
+		return request.Model, nil
+	}
 	var modelRequest ModelRequest
 	err := common.UnmarshalBodyReusable(c, &modelRequest)
 	if err != nil {
@@ -77,11 +94,6 @@ func getRequestModel(c *gin.Context) (string, error) {
 	if strings.HasPrefix(c.Request.URL.Path, "/v1/audio/transcriptions") || strings.HasPrefix(c.Request.URL.Path, "/v1/audio/translations") {
 		if modelRequest.Model == "" {
 			modelRequest.Model = "whisper-1"
-		}
-	}
-	if modelAction := c.Param("modelAction"); modelAction != "" {
-		if separator := strings.LastIndexByte(modelAction, ':'); separator > 0 {
-			modelRequest.Model = modelAction[:separator]
 		}
 	}
 	return modelRequest.Model, nil

@@ -17,6 +17,12 @@ import (
 // protocol request. A mixed-provider group must not randomly choose a channel
 // that requires an unimplemented cross-protocol conversion.
 func GetRandomSatisfiedChannelByType(group, model string, channelType int, ignoreFirstPriority bool) (*Channel, error) {
+	return GetRandomSatisfiedChannelByTypeExcluding(group, model, channelType, ignoreFirstPriority, nil)
+}
+
+// GetRandomSatisfiedChannelByTypeExcluding chooses a compatible channel that
+// has not already failed during the current native request.
+func GetRandomSatisfiedChannelByTypeExcluding(group, model string, channelType int, ignoreFirstPriority bool, excluded map[int]bool) (*Channel, error) {
 	var abilities []Ability
 	groupColumn := "`group`"
 	if common.UsingPostgreSQL {
@@ -36,24 +42,30 @@ func GetRandomSatisfiedChannelByType(group, model string, channelType int, ignor
 	if err := DB.Where("id IN ? AND type = ? AND status = ?", ids, channelType, ChannelStatusEnabled).Find(&channels).Error; err != nil {
 		return nil, err
 	}
-	if len(channels) == 0 {
+	available := channels[:0]
+	for _, channel := range channels {
+		if !excluded[channel.Id] {
+			available = append(available, channel)
+		}
+	}
+	if len(available) == 0 {
 		return nil, errors.New("channel not found")
 	}
-	sort.Slice(channels, func(i, j int) bool { return channels[i].GetPriority() > channels[j].GetPriority() })
-	firstPriority := channels[0].GetPriority()
-	end := len(channels)
+	sort.Slice(available, func(i, j int) bool { return available[i].GetPriority() > available[j].GetPriority() })
+	firstPriority := available[0].GetPriority()
+	end := len(available)
 	if firstPriority > 0 {
-		for i := range channels {
-			if channels[i].GetPriority() != firstPriority {
+		for i := range available {
+			if available[i].GetPriority() != firstPriority {
 				end = i
 				break
 			}
 		}
 	}
-	if ignoreFirstPriority && end < len(channels) {
-		return &channels[end+rand.Intn(len(channels)-end)], nil
+	if ignoreFirstPriority && end < len(available) {
+		return &available[end+rand.Intn(len(available)-end)], nil
 	}
-	return &channels[rand.Intn(end)], nil
+	return &available[rand.Intn(end)], nil
 }
 
 type Ability struct {
