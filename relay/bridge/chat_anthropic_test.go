@@ -34,14 +34,26 @@ func TestChatToAnthropicPreservesToolsAndConversation(t *testing.T) {
 
 func TestChatToAnthropicRejectsLossyFeatures(t *testing.T) {
 	for _, body := range []string{
-		`{"model":"alias","messages":[{"role":"user","content":"hi"}],"stream":true}`,
-		`{"model":"alias","messages":[{"role":"user","content":[{"type":"image_url","image_url":{"url":"https://example.com/a.png"}}]}]}`,
+		`{"model":"alias","messages":[{"role":"user","content":[{"type":"image_url","image_url":{"url":"https://example.com/a.png","detail":"high"}}]}]}`,
 		`{"model":"alias","messages":[{"role":"user","content":"hi"}],"response_format":{"type":"json_object"}}`,
 		`{"model":"alias","messages":[{"role":"user","content":"hi"}],"n":2}`,
 	} {
 		if _, err := ChatToAnthropic([]byte(body), "claude-upstream"); err == nil {
 			t.Fatalf("lossy Chat request was accepted: %s", body)
 		}
+	}
+}
+
+func TestChatToAnthropicForwardsStreamFlag(t *testing.T) {
+	converted, err := ChatToAnthropic([]byte(`{"model":"alias","messages":[{"role":"user","content":"hi"}],"stream":true}`), "claude-upstream")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var result struct {
+		Stream bool `json:"stream"`
+	}
+	if err := json.Unmarshal(converted, &result); err != nil || !result.Stream {
+		t.Fatalf("stream flag was not forwarded: %s err %v", converted, err)
 	}
 }
 
@@ -75,5 +87,20 @@ func TestAnthropicToChatConvertsToolsUsageAndRejectsThinking(t *testing.T) {
 	}
 	if _, _, err := AnthropicToChat([]byte(`{"id":"msg_2","type":"message","stop_reason":"end_turn","content":[{"type":"thinking","thinking":"private"}]}`), "alias"); err == nil {
 		t.Fatal("thinking block was silently dropped")
+	}
+}
+
+func TestAnthropicToChatRejectsResponseFieldsItCannotRepresent(t *testing.T) {
+	for _, body := range []string{
+		`{"id":"msg_1","type":"message","stop_reason":"end_turn","content":[{"type":"text","text":"ok","citations":[{"type":"web_search_result_location"}]}]}`,
+		`{"id":"msg_1","type":"message","stop_reason":"end_turn","content":[{"type":"text","text":"ok"}],"usage":{"input_tokens":2,"output_tokens":1,"server_tool_use":{"web_search_requests":1}}}`,
+		`{"id":"msg_1","type":"message","stop_reason":"end_turn","content":[{"type":"text","text":"ok"}],"container":{"id":"x"}}`,
+		`{"id":"msg_1","type":"message","stop_reason":"tool_use","content":[{"type":"tool_use","id":"call_1","name":"lookup","input":{}},{"type":"text","text":"after tool"}]}`,
+		`{"id":"msg_1","type":"message","stop_reason":"stop_sequence","stop_sequence":"END","content":[{"type":"text","text":"ok"}]}`,
+		`{"id":"msg_1","type":"message","stop_reason":"tool_use","content":[{"type":"tool_use","id":"call_1","name":"lookup","input":true}]}`,
+	} {
+		if _, _, err := AnthropicToChat([]byte(body), "alias"); err == nil {
+			t.Fatalf("lossy Anthropic response was accepted: %s", body)
+		}
 	}
 }

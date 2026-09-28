@@ -41,6 +41,22 @@ func TestAnthropicToChatRequestPreservesConversationAndTools(t *testing.T) {
 	}
 }
 
+func TestAnthropicToChatStreamingRequestsUsage(t *testing.T) {
+	converted, err := AnthropicToChatRequest([]byte(`{"model":"alias","max_tokens":16,"stream":true,"messages":[{"role":"user","content":"hi"}]}`), "upstream")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var request struct {
+		Stream        bool `json:"stream"`
+		StreamOptions struct {
+			IncludeUsage bool `json:"include_usage"`
+		} `json:"stream_options"`
+	}
+	if err := json.Unmarshal(converted, &request); err != nil || !request.Stream || !request.StreamOptions.IncludeUsage {
+		t.Fatalf("converted streaming Chat request omitted usage: %s err %v", converted, err)
+	}
+}
+
 func TestAnthropicToChatResponsePreservesUsageAndRejectsLossyFeatures(t *testing.T) {
 	input := []byte(`{"id":"chat_1","object":"chat.completion","choices":[{"index":0,"finish_reason":"tool_calls","message":{"role":"assistant","content":"Searching","tool_calls":[{"id":"call_1","type":"function","function":{"name":"search","arguments":"{\"q\":\"test\"}"}}]}}],"usage":{"prompt_tokens":8,"completion_tokens":3,"total_tokens":11,"prompt_tokens_details":{"cached_tokens":2}}}`)
 	converted, usage, err := ChatToAnthropicResponse(input, "client-model")
@@ -67,7 +83,7 @@ func TestAnthropicToChatResponsePreservesUsageAndRejectsLossyFeatures(t *testing
 		t.Fatalf("Chat response conversion lost fields: %s usage %+v", converted, usage)
 	}
 	for _, body := range []string{
-		`{"model":"x","messages":[{"role":"user","content":[{"type":"image","source":{}}]}],"max_tokens":10}`,
+		`{"model":"x","messages":[{"role":"user","content":[{"type":"image","source":{"type":"base64","media_type":"image/png","data":"!!!"}}]}],"max_tokens":10}`,
 		`{"model":"x","messages":[{"role":"user","content":"hi"}],"max_tokens":10,"thinking":{"type":"enabled","budget_tokens":8}}`,
 		`{"model":"x","messages":[{"role":"user","content":[{"type":"tool_result","tool_use_id":"a","content":"ok","is_error":true}]}],"max_tokens":10}`,
 	} {

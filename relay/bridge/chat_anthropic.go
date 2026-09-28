@@ -9,8 +9,10 @@ import (
 	"github.com/infinmalum/one-gateway/relay/native"
 )
 
-// ChatToAnthropic converts the representable synchronous Chat Completions
-// subset. It rejects fields that would otherwise be silently discarded.
+// ChatToAnthropic converts the representable Chat Completions subset. It
+// rejects fields that would otherwise be silently discarded. Streaming
+// requests convert their body; the response stream uses the paired
+// StreamConverter.
 func ChatToAnthropic(body []byte, model string) ([]byte, error) {
 	if model == "" {
 		return nil, errors.New("model is required")
@@ -20,8 +22,8 @@ func ChatToAnthropic(body []byte, model string) ([]byte, error) {
 		return nil, err
 	}
 	var stream bool
-	if err := decode(fields["stream"], &stream); err != nil || stream {
-		return nil, errors.New("streaming Chat to Anthropic conversion is not supported")
+	if err := decode(fields["stream"], &stream); err != nil {
+		return nil, errors.New("stream must be boolean")
 	}
 	var messages []json.RawMessage
 	if err := json.Unmarshal(fields["messages"], &messages); err != nil || len(messages) == 0 {
@@ -42,6 +44,9 @@ func ChatToAnthropic(body []byte, model string) ([]byte, error) {
 		limit = 1024
 	}
 	request := map[string]any{"model": model, "max_tokens": limit}
+	if stream {
+		request["stream"] = true
+	}
 	var system []string
 	var converted []any
 	for _, raw := range messages {
@@ -67,7 +72,7 @@ func ChatToAnthropic(body []byte, model string) ([]byte, error) {
 			if len(message["tool_call_id"]) != 0 {
 				return nil, errors.New("tool_call_id is only valid on tool messages")
 			}
-			blocks, err := textBlocks(message["content"])
+			blocks, err := chatInputBlocks(message["content"], role == "user")
 			if err != nil {
 				return nil, err
 			}
@@ -214,6 +219,44 @@ func ChatToAnthropic(body []byte, model string) ([]byte, error) {
 }
 
 func AnthropicToChat(body []byte, requestedModel string) ([]byte, native.Usage, error) {
+	fields, err := object(body, "id", "type", "role", "model", "content", "stop_reason", "stop_sequence", "usage")
+	if err != nil {
+		return nil, native.Usage{}, err
+	}
+	var rawBlocks []json.RawMessage
+	if json.Unmarshal(fields["content"], &rawBlocks) != nil {
+		return nil, native.Usage{}, errors.New("Anthropic content must be an array")
+	}
+	for _, raw := range rawBlocks {
+		block, err := object(raw, "type", "text", "id", "name", "input")
+		if err != nil {
+			return nil, native.Usage{}, err
+		}
+		var kind string
+		_ = json.Unmarshal(block["type"], &kind)
+		switch kind {
+		case "text":
+			var value string
+			if len(block) != 2 || json.Unmarshal(block["text"], &value) != nil {
+				return nil, native.Usage{}, errors.New("invalid Anthropic text block")
+			}
+		case "tool_use":
+			if len(block) != 4 {
+				return nil, native.Usage{}, errors.New("invalid Anthropic tool_use block")
+			}
+			var input map[string]any
+			if json.Unmarshal(block["input"], &input) != nil || input == nil {
+				return nil, native.Usage{}, errors.New("Anthropic tool_use input must be an object")
+			}
+		default:
+			return nil, native.Usage{}, fmt.Errorf("Anthropic content block %q cannot be converted", kind)
+		}
+	}
+	if len(fields["usage"]) != 0 {
+		if _, err := object(fields["usage"], "input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"); err != nil {
+			return nil, native.Usage{}, err
+		}
+	}
 	var response struct {
 		ID         string `json:"id"`
 		Type       string `json:"type"`
@@ -234,6 +277,24 @@ func AnthropicToChat(body []byte, requestedModel string) ([]byte, native.Usage, 
 	}
 	if err := json.Unmarshal(body, &response); err != nil || response.Type != "message" || response.ID == "" {
 		return nil, native.Usage{}, errors.New("invalid Anthropic message response")
+	}
+	var role string
+	if len(fields["role"]) != 0 && (json.Unmarshal(fields["role"], &role) != nil || role != "assistant") {
+		return nil, native.Usage{}, errors.New("Anthropic response role must be assistant")
+	}
+	if len(fields["stop_sequence"]) != 0 && string(fields["stop_sequence"]) != "null" {
+		return nil, native.Usage{}, errors.New("Anthropic stop_sequence cannot be converted")
+	}
+	if response.Usage != nil && (response.Usage.InputTokens < 0 || response.Usage.OutputTokens < 0 || response.Usage.CacheCreationInputTokens < 0 || response.Usage.CacheReadInputTokens < 0) {
+		return nil, native.Usage{}, errors.New("invalid Anthropic usage")
+	}
+	var seenTool bool
+	for _, block := range response.Content {
+		if block.Type == "tool_use" {
+			seenTool = true
+		} else if block.Type == "text" && seenTool {
+			return nil, native.Usage{}, errors.New("interleaved Anthropic text and tool blocks cannot be converted")
+		}
 	}
 	finish := ""
 	switch response.StopReason {

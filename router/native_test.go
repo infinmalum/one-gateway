@@ -251,7 +251,7 @@ func TestNativeRoutesSelectMatchingProtocolAndPreserveWireData(t *testing.T) {
 	if err := openAIOnly.Insert(); err != nil {
 		t.Fatal(err)
 	}
-	unsupportedRequest := httptest.NewRequest(http.MethodPost, "/v1/messages", strings.NewReader(`{"model":"openai-only","messages":[],"max_tokens":8,"stream":true}`))
+	unsupportedRequest := httptest.NewRequest(http.MethodPost, "/v1/messages", strings.NewReader(`{"model":"orphan-model","messages":[],"max_tokens":8,"stream":true}`))
 	unsupportedRequest.Header.Set("Content-Type", "application/json")
 	unsupportedRequest.Header.Set("x-api-key", "sk-gateway-key")
 	unsupportedResponse := httptest.NewRecorder()
@@ -266,8 +266,13 @@ func TestNativeRoutesSelectMatchingProtocolAndPreserveWireData(t *testing.T) {
 	if unsupportedGeminiResponse.Code != http.StatusServiceUnavailable || !strings.Contains(unsupportedGeminiResponse.Body.String(), `"status":"UNAVAILABLE"`) || !strings.Contains(unsupportedGeminiResponse.Body.String(), "Gemini") {
 		t.Fatalf("unsupported Gemini channel: status %d body %s", unsupportedGeminiResponse.Code, unsupportedGeminiResponse.Body.String())
 	}
-	specificMismatch := httptest.NewRequest(http.MethodPost, "/v1/messages", strings.NewReader(`{"model":"openai-only","messages":[],"max_tokens":8,"stream":true}`))
-	specificMismatch.Header.Set("Authorization", "Bearer sk-gateway-key-"+strconv.Itoa(openAIOnly.Id))
+	blockedBaseURL := anthropicServer.URL
+	blockedChannel := model.Channel{Type: channeltype.Baidu, Key: "blocked-key", Name: "blocked", Status: model.ChannelStatusEnabled, Group: "default", Models: "blocked-model", BaseURL: &blockedBaseURL}
+	if err := blockedChannel.Insert(); err != nil {
+		t.Fatal(err)
+	}
+	specificMismatch := httptest.NewRequest(http.MethodPost, "/v1/messages", strings.NewReader(`{"model":"blocked-model","messages":[],"max_tokens":8,"stream":true}`))
+	specificMismatch.Header.Set("Authorization", "Bearer sk-gateway-key-"+strconv.Itoa(blockedChannel.Id))
 	specificResponse := httptest.NewRecorder()
 	r.ServeHTTP(specificResponse, specificMismatch)
 	if specificResponse.Code != http.StatusBadRequest || !strings.Contains(specificResponse.Body.String(), "does not support this protocol") {
@@ -560,6 +565,45 @@ func TestNativeRoutesSelectMatchingProtocolAndPreserveWireData(t *testing.T) {
 	r.ServeHTTP(reverseUnsupportedResponse, unsupportedReverse)
 	if reverseUnsupportedResponse.Code != http.StatusUnprocessableEntity || reverseCalls.Load() != 1 {
 		t.Fatalf("unsupported Messages conversion reached upstream: status %d calls %d body %s", reverseUnsupportedResponse.Code, reverseCalls.Load(), reverseUnsupportedResponse.Body.String())
+	}
+	var geminiBridgeCalls atomic.Int64
+	geminiBridgeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		geminiBridgeCalls.Add(1)
+		if request.URL.Path != "/v1beta/models/gemini-bridge-upstream:generateContent" || request.Header.Get("x-goog-api-key") != "gemini-bridge-key" || request.Header.Get("Authorization") != "" {
+			t.Errorf("Chat to Gemini route or credentials changed: %s %v", request.URL, request.Header)
+		}
+		body, _ := io.ReadAll(request.Body)
+		if !strings.Contains(string(body), `"systemInstruction":{"parts":[{"text":"configured"}]}`) || !strings.Contains(string(body), `"role":"user"`) || !strings.Contains(string(body), `"maxOutputTokens":16`) {
+			t.Errorf("Chat to Gemini request lost fields: %s", body)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"responseId":"gemini-bridge-response","modelVersion":"gemini-bridge-upstream","candidates":[{"content":{"role":"model","parts":[{"text":"hello"}]},"finishReason":"STOP","safetyRatings":[]}],"usageMetadata":{"promptTokenCount":4,"candidatesTokenCount":2,"totalTokenCount":6}}`)
+	}))
+	defer geminiBridgeServer.Close()
+	geminiBridgeURL, geminiBridgeMapping, geminiBridgePrompt := geminiBridgeServer.URL, `{"gemini-bridge-alias":"gemini-bridge-upstream"}`, "configured"
+	geminiBridgeChannel := model.Channel{Type: channeltype.Gemini, Key: "gemini-bridge-key", Name: "gemini-bridge", Status: model.ChannelStatusEnabled, Group: "default", Models: "gemini-bridge-alias", BaseURL: &geminiBridgeURL, ModelMapping: &geminiBridgeMapping, SystemPrompt: &geminiBridgePrompt}
+	if err := geminiBridgeChannel.Insert(); err != nil {
+		t.Fatal(err)
+	}
+	geminiBridgeRequest := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"gemini-bridge-alias","messages":[{"role":"system","content":"original"},{"role":"user","content":"hi"}],"max_tokens":16}`))
+	geminiBridgeRequest.Header.Set("Authorization", "Bearer sk-gateway-key")
+	geminiBridgeRequest.Header.Set("Content-Type", "application/json")
+	geminiBridgeResponse := httptest.NewRecorder()
+	r.ServeHTTP(geminiBridgeResponse, geminiBridgeRequest)
+	if geminiBridgeResponse.Code != http.StatusOK || !strings.Contains(geminiBridgeResponse.Body.String(), `"model":"gemini-bridge-alias"`) || !strings.Contains(geminiBridgeResponse.Body.String(), `"completion_tokens":2`) || !strings.Contains(geminiBridgeResponse.Body.String(), `"modelVersion":"gemini-bridge-upstream"`) {
+		t.Fatalf("Chat to Gemini response conversion failed: status %d body %s", geminiBridgeResponse.Code, geminiBridgeResponse.Body.String())
+	}
+	var geminiBridgeLog model.Log
+	if err := db.Where("channel_id = ? AND type = ?", geminiBridgeChannel.Id, model.LogTypeConsume).First(&geminiBridgeLog).Error; err != nil || geminiBridgeLog.PromptTokens != 4 || geminiBridgeLog.CompletionTokens != 2 || !geminiBridgeLog.SystemPromptReset {
+		t.Fatalf("Chat to Gemini usage was not settled: %+v err %v", geminiBridgeLog, err)
+	}
+	unsupportedGeminiBridge := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"gemini-bridge-alias","messages":[{"role":"user","content":"hi"}],"tools":[{"type":"function","function":{"name":"search"}}]}`))
+	unsupportedGeminiBridge.Header.Set("Authorization", "Bearer sk-gateway-key")
+	unsupportedGeminiBridge.Header.Set("Content-Type", "application/json")
+	unsupportedGeminiBridgeResponse := httptest.NewRecorder()
+	r.ServeHTTP(unsupportedGeminiBridgeResponse, unsupportedGeminiBridge)
+	if unsupportedGeminiBridgeResponse.Code != http.StatusUnprocessableEntity || geminiBridgeCalls.Load() != 1 {
+		t.Fatalf("unsupported Chat to Gemini request reached upstream: status %d calls %d body %s", unsupportedGeminiBridgeResponse.Code, geminiBridgeCalls.Load(), unsupportedGeminiBridgeResponse.Body.String())
 	}
 	completionNormal := `{"id":"cmpl-1","choices":[{"text":"ok"}],"usage":{"prompt_tokens":2,"completion_tokens":3},"future":true}`
 	completionEvents := "data: {\"id\":\"cmpl-1\",\"choices\":[{\"text\":\"ok\"}],\"future\":true}\n\n" +
