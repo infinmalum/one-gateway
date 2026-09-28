@@ -26,6 +26,12 @@ func abortWithMessage(c *gin.Context, statusCode int, message string) {
 		logger.Error(c.Request.Context(), message)
 		return
 	}
+	if isOpenAITextRequest(c) {
+		c.JSON(statusCode, native.ErrorBody(native.OpenAIChat, statusCode, message))
+		c.Abort()
+		logger.Error(c.Request.Context(), message)
+		return
+	}
 	if isNativeGeminiRequest(c) {
 		c.JSON(statusCode, native.ErrorBody(native.Gemini, statusCode, message))
 		c.Abort()
@@ -40,6 +46,17 @@ func abortWithMessage(c *gin.Context, statusCode int, message string) {
 	})
 	c.Abort()
 	logger.Error(c.Request.Context(), message)
+}
+
+func isOpenAITextRequest(c *gin.Context) bool {
+	if c.Request.Method != http.MethodPost {
+		return false
+	}
+	switch c.Request.URL.Path {
+	case "/v1/chat/completions", "/v1/completions", "/v1/embeddings", "/v1/moderations":
+		return true
+	}
+	return strings.HasPrefix(c.Request.URL.Path, "/v1/engines/") && strings.HasSuffix(c.Request.URL.Path, "/embeddings")
 }
 
 func isNativeGeminiRequest(c *gin.Context) bool {
@@ -78,10 +95,13 @@ func getRequestModel(c *gin.Context) (string, error) {
 	}
 	if strings.HasPrefix(c.Request.URL.Path, "/v1/moderations") {
 		if modelRequest.Model == "" {
-			modelRequest.Model = "text-moderation-stable"
+			modelRequest.Model = native.DefaultModerationModel
 		}
 	}
 	if strings.HasSuffix(c.Request.URL.Path, "embeddings") {
+		if pathModel := c.Param("model"); pathModel != "" && modelRequest.Model != "" && modelRequest.Model != pathModel {
+			return "", fmt.Errorf("body model does not match the engine path")
+		}
 		if modelRequest.Model == "" {
 			modelRequest.Model = c.Param("model")
 		}

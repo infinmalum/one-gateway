@@ -113,7 +113,7 @@ func (r *NativeReservation) Settle(ctx context.Context, usage native.Usage, stre
 		content += "; upstream usage unavailable, reserved quota retained"
 	}
 	if interrupted {
-		content += "; stream interrupted"
+		content += "; response interrupted"
 	}
 	model.RecordConsumeLog(ctx, &model.Log{
 		UserId:            r.UserID,

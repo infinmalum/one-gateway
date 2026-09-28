@@ -3,6 +3,7 @@ package controller
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 	"github.com/infinmalum/one-gateway/middleware"
 	dbmodel "github.com/infinmalum/one-gateway/model"
 	"github.com/infinmalum/one-gateway/monitor"
+	"github.com/infinmalum/one-gateway/relay/channeltype"
 	"github.com/infinmalum/one-gateway/relay/controller"
 	"github.com/infinmalum/one-gateway/relay/model"
 	"github.com/infinmalum/one-gateway/relay/relaymode"
@@ -45,6 +47,34 @@ func relayHelper(c *gin.Context, relayMode int) *model.ErrorWithStatusCode {
 func Relay(c *gin.Context) {
 	ctx := c.Request.Context()
 	relayMode := relaymode.GetByPath(c.Request.URL.Path)
+	if relayMode == relaymode.ChatCompletions && c.GetInt(ctxkey.Channel) == channeltype.OpenAI {
+		NativeOpenAIChat(c)
+		return
+	}
+	if relayMode == relaymode.ChatCompletions && c.GetInt(ctxkey.Channel) == channeltype.Anthropic {
+		body, err := common.GetRequestBody(c)
+		if err == nil {
+			var fields struct {
+				Stream bool `json:"stream"`
+			}
+			if json.Unmarshal(body, &fields) == nil && !fields.Stream {
+				NativeOpenAIChatViaAnthropic(c)
+				return
+			}
+		}
+	}
+	if relayMode == relaymode.Embeddings && c.GetInt(ctxkey.Channel) == channeltype.OpenAI {
+		NativeOpenAIEmbeddings(c)
+		return
+	}
+	if relayMode == relaymode.Moderations && c.GetInt(ctxkey.Channel) == channeltype.OpenAI {
+		NativeOpenAIModerations(c)
+		return
+	}
+	if relayMode == relaymode.Completions && c.GetInt(ctxkey.Channel) == channeltype.OpenAI && c.GetString(ctxkey.SystemPrompt) == "" {
+		NativeOpenAICompletions(c)
+		return
+	}
 	if config.DebugEnabled {
 		requestBody, _ := common.GetRequestBody(c)
 		logger.Debugf(ctx, "request body: %s", string(requestBody))
