@@ -40,14 +40,16 @@ type Principal struct {
 }
 
 type Request struct {
-	Protocol                 native.Protocol
-	UpstreamProtocol         native.Protocol
-	FallbackUpstreamProtocol native.Protocol
-	Model                    string
-	Action                   string
-	Version                  string
-	Stream                   bool
-	MaxOutputTokens          int64
+	Protocol         native.Protocol
+	UpstreamProtocol native.Protocol
+	// FallbackUpstreamProtocols is tried in order when no channel for the
+	// primary upstream protocol can serve the model.
+	FallbackUpstreamProtocols []native.Protocol
+	Model                     string
+	Action                    string
+	Version                   string
+	Stream                    bool
+	MaxOutputTokens           int64
 	// FallbackInputTokens is used by operations whose successful response may
 	// omit usage, such as Moderations. A provider usage report takes precedence.
 	FallbackInputTokens int64
@@ -81,32 +83,51 @@ func Forward(ctx context.Context, dst http.ResponseWriter, input Request) *HTTPE
 		input.Principal.Group = group
 	}
 	if input.Channel.ID == 0 {
-		selected, err := selectInitial(input, upstreamProtocol)
-		if err != nil {
-			if input.FallbackUpstreamProtocol == "" || (err.Status != http.StatusServiceUnavailable && !(input.Principal.SpecificChannel && err.Status == http.StatusBadRequest)) {
-				return err
+		var primaryErr *HTTPError
+		var selected Channel
+		candidates := append([]native.Protocol{upstreamProtocol}, input.FallbackUpstreamProtocols...)
+		for _, candidate := range candidates {
+			candidateChannel, err := selectInitial(input, candidate)
+			if err == nil {
+				selected = candidateChannel
+				upstreamProtocol = candidate
+				break
 			}
-			var fallbackErr *HTTPError
-			selected, fallbackErr = selectInitial(input, input.FallbackUpstreamProtocol)
-			if fallbackErr != nil {
-				return err
+			if primaryErr == nil {
+				primaryErr = err
+				if err.Status != http.StatusServiceUnavailable && !(input.Principal.SpecificChannel && err.Status == http.StatusBadRequest) {
+					return err
+				}
 			}
-			upstreamProtocol = input.FallbackUpstreamProtocol
+		}
+		if selected.ID == 0 {
+			return primaryErr
 		}
 		input.Channel = selected
-	}
-	if input.Channel.Type != requiredChannelType(upstreamProtocol) && input.FallbackUpstreamProtocol != "" && input.Channel.Type == requiredChannelType(input.FallbackUpstreamProtocol) {
-		upstreamProtocol = input.FallbackUpstreamProtocol
-	}
-	if input.Channel.Type != requiredChannelType(upstreamProtocol) {
-		return &HTTPError{http.StatusBadRequest, "selected channel does not support this protocol"}
+	} else if input.Channel.Type != requiredChannelType(upstreamProtocol) {
+		matched := false
+		for _, candidate := range input.FallbackUpstreamProtocols {
+			if input.Channel.Type == requiredChannelType(candidate) {
+				upstreamProtocol = candidate
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return &HTTPError{http.StatusBadRequest, "selected channel does not support this protocol"}
+		}
 	}
 	converter, err := bridge.For(input.Protocol, upstreamProtocol)
 	if err != nil {
 		return &HTTPError{http.StatusUnprocessableEntity, err.Error()}
 	}
+	var streamConverter bridge.StreamConverter
 	if converter != nil && input.Stream {
-		return &HTTPError{http.StatusUnprocessableEntity, "streaming protocol conversion is not supported"}
+		candidate, ok := converter.(bridge.StreamConverter)
+		if !ok {
+			return &HTTPError{http.StatusUnprocessableEntity, "streaming protocol conversion is not supported"}
+		}
+		streamConverter = candidate
 	}
 	httpClient := input.HTTPClient
 	if httpClient == nil {
@@ -126,6 +147,16 @@ func Forward(ctx context.Context, dst http.ResponseWriter, input Request) *HTTPE
 	retries := max(0, input.RetryLimit)
 	tried := make(map[int]bool)
 	channel := input.Channel
+	// The Gemini action is selected by the transport, so a fallback onto a
+	// Gemini channel derives it from the final upstream protocol instead of
+	// requiring the controller to know the routing outcome.
+	action := input.Action
+	if upstreamProtocol == native.Gemini {
+		action = "generateContent"
+		if input.Stream {
+			action = "streamGenerateContent"
+		}
+	}
 	for {
 		tried[channel.ID] = true
 		mappedModel := input.Model
@@ -146,7 +177,7 @@ func Forward(ctx context.Context, dst http.ResponseWriter, input Request) *HTTPE
 		}
 		req, err := native.BuildRequest(ctx, native.Request{
 			Protocol: upstreamProtocol, BaseURL: channel.BaseURL, Version: version,
-			Model: mappedModel, Action: input.Action, APIKey: channel.APIKey,
+			Model: mappedModel, Action: action, APIKey: channel.APIKey,
 			SystemPrompt: channel.SystemPrompt, Body: body,
 			Headers: input.Headers, Query: input.Query,
 		})
@@ -202,6 +233,20 @@ func Forward(ctx context.Context, dst http.ResponseWriter, input Request) *HTTPE
 			_ = response.Body.Close()
 			return &HTTPError{http.StatusBadGateway, "upstream did not return an event stream"}
 		}
+		if streamConverter != nil {
+			copyHeaders(dst.Header(), response.Header)
+			dst.Header().Set("Content-Type", "text/event-stream")
+			dst.Header().Del("Content-Length")
+			dst.WriteHeader(http.StatusOK)
+			usage, streamErr := streamConverter.Stream(flushingWriter{dst}, response.Body, input.Model)
+			_ = response.Body.Close()
+			interrupted := streamErr != nil || ctx.Err() != nil || !usage.Complete
+			reservation.Settle(settlementContext, usage, true, interrupted)
+			if streamErr != nil {
+				logger.Errorf(settlementContext, "converted stream interrupted on channel %d: %v", channel.ID, streamErr)
+			}
+			return nil
+		}
 		if converter != nil {
 			const maxConvertedResponse = 16 << 20
 			body, readErr := io.ReadAll(io.LimitReader(response.Body, maxConvertedResponse+1))
@@ -249,6 +294,22 @@ func supportsSystemPrompt(protocol native.Protocol) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+// flushingWriter lets bridge converters stream increments through the Response
+// Writer without depending on Gin.
+type flushingWriter struct {
+	writer http.ResponseWriter
+}
+
+func (f flushingWriter) Write(p []byte) (int, error) {
+	return f.writer.Write(p)
+}
+
+func (f flushingWriter) Flush() {
+	if flusher, ok := f.writer.(http.Flusher); ok {
+		flusher.Flush()
 	}
 }
 

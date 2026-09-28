@@ -17,15 +17,15 @@ import (
 )
 
 type nativeInput struct {
-	protocol                 native.Protocol
-	upstreamProtocol         native.Protocol
-	fallbackUpstreamProtocol native.Protocol
-	model                    string
-	action                   string
-	stream                   bool
-	maxOutputTokens          int64
-	fallbackInputTokens      int64
-	body                     []byte
+	protocol                  native.Protocol
+	upstreamProtocol          native.Protocol
+	fallbackUpstreamProtocols []native.Protocol
+	model                     string
+	action                    string
+	stream                    bool
+	maxOutputTokens           int64
+	fallbackInputTokens       int64
+	body                      []byte
 }
 
 func NativeOpenAIResponses(c *gin.Context) {
@@ -61,6 +61,10 @@ func NativeOpenAIChatViaAnthropic(c *gin.Context) {
 	nativeOpenAIChat(c, native.Anthropic)
 }
 
+func NativeOpenAIChatViaGemini(c *gin.Context) {
+	nativeOpenAIChat(c, native.Gemini)
+}
+
 func nativeOpenAIChat(c *gin.Context, upstream native.Protocol) {
 	body, err := common.GetRequestBody(c)
 	if err != nil {
@@ -82,6 +86,8 @@ func nativeOpenAIChat(c *gin.Context, upstream native.Protocol) {
 	if upstream == native.Anthropic && limit == 0 {
 		limit = 1024
 	}
+	// The Gemini upstream action is derived from the stream flag in the
+	// lifecycle, which knows the final upstream protocol.
 	forwardNative(c, nativeInput{protocol: native.OpenAIChat, upstreamProtocol: upstream, model: fields.Model, stream: fields.Stream,
 		maxOutputTokens: limit, body: body})
 }
@@ -184,10 +190,9 @@ func NativeAnthropic(c *gin.Context) {
 		writeNativeError(c, native.Anthropic, http.StatusBadRequest, errors.New("model, messages, and positive max_tokens are required"))
 		return
 	}
-	input := nativeInput{protocol: native.Anthropic, model: fields.Model, stream: fields.Stream, maxOutputTokens: fields.MaxTokens, body: body}
-	if !fields.Stream {
-		input.fallbackUpstreamProtocol = native.OpenAIChat
-	}
+	input := nativeInput{protocol: native.Anthropic, model: fields.Model, stream: fields.Stream,
+		maxOutputTokens: fields.MaxTokens, body: body,
+		fallbackUpstreamProtocols: []native.Protocol{native.OpenAIChat, native.Gemini}}
 	forwardNative(c, input)
 }
 
@@ -239,7 +244,7 @@ func forwardNative(c *gin.Context, input nativeInput) {
 	}
 	result := lifecycle.Forward(c.Request.Context(), c.Writer, lifecycle.Request{
 		Protocol: input.protocol, UpstreamProtocol: input.upstreamProtocol,
-		FallbackUpstreamProtocol: input.fallbackUpstreamProtocol, Model: input.model, Action: input.action,
+		FallbackUpstreamProtocols: input.fallbackUpstreamProtocols, Model: input.model, Action: input.action,
 		Version: version, Stream: input.stream, MaxOutputTokens: input.maxOutputTokens,
 		FallbackInputTokens: input.fallbackInputTokens,
 		Body:                input.body, Headers: c.Request.Header, Query: c.Request.URL.Query(),

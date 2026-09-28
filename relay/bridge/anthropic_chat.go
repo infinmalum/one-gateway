@@ -8,8 +8,10 @@ import (
 	"github.com/infinmalum/one-gateway/relay/native"
 )
 
-// AnthropicToChatRequest converts the synchronous Messages subset that Chat
-// Completions can represent. Unsupported fields fail before the upstream call.
+// AnthropicToChatRequest converts the Messages subset that Chat Completions
+// can represent. Unsupported fields fail before the upstream call. Streaming
+// requests convert their body; the response stream uses the paired
+// StreamConverter.
 func AnthropicToChatRequest(body []byte, model string) ([]byte, error) {
 	if model == "" {
 		return nil, errors.New("model is required")
@@ -19,8 +21,8 @@ func AnthropicToChatRequest(body []byte, model string) ([]byte, error) {
 		return nil, err
 	}
 	var stream bool
-	if err := decode(fields["stream"], &stream); err != nil || stream {
-		return nil, errors.New("streaming Messages to Chat conversion is not supported")
+	if err := decode(fields["stream"], &stream); err != nil {
+		return nil, errors.New("stream must be boolean")
 	}
 	var limit int64
 	if err := json.Unmarshal(fields["max_tokens"], &limit); err != nil || limit <= 0 {
@@ -31,6 +33,10 @@ func AnthropicToChatRequest(body []byte, model string) ([]byte, error) {
 		return nil, errors.New("messages must be a non-empty array")
 	}
 	converted := map[string]any{"model": model, "max_completion_tokens": limit}
+	if stream {
+		converted["stream"] = true
+		converted["stream_options"] = map[string]bool{"include_usage": true}
+	}
 	var chatMessages []any
 	if len(fields["system"]) != 0 {
 		text, err := messagesText(fields["system"])
@@ -57,7 +63,7 @@ func AnthropicToChatRequest(body []byte, model string) ([]byte, error) {
 		if json.Unmarshal(message["content"], &blocks) != nil || len(blocks) == 0 {
 			return nil, errors.New("Messages content must be text or a non-empty block array")
 		}
-		var textParts []map[string]string
+		var textParts []any
 		var toolCalls []any
 		flushUserText := func() {
 			if len(textParts) > 0 {
@@ -66,7 +72,7 @@ func AnthropicToChatRequest(body []byte, model string) ([]byte, error) {
 			}
 		}
 		for _, blockRaw := range blocks {
-			block, err := object(blockRaw, "type", "text", "id", "name", "input", "tool_use_id", "content", "is_error")
+			block, err := object(blockRaw, "type", "text", "source", "id", "name", "input", "tool_use_id", "content", "is_error")
 			if err != nil {
 				return nil, err
 			}
@@ -82,6 +88,15 @@ func AnthropicToChatRequest(body []byte, model string) ([]byte, error) {
 					return nil, errors.New("text block text must be a string")
 				}
 				textParts = append(textParts, map[string]string{"type": "text", "text": text})
+			case "image":
+				if role != "user" || len(block) != 2 {
+					return nil, errors.New("image must be a user block with only a source")
+				}
+				part, err := anthropicImageToChat(block["source"])
+				if err != nil {
+					return nil, err
+				}
+				textParts = append(textParts, part)
 			case "tool_use":
 				if role != "assistant" || len(block) != 4 {
 					return nil, errors.New("tool_use must be an assistant block with id, name, and input")
