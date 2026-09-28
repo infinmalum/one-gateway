@@ -3,6 +3,7 @@ package controller
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -50,8 +51,24 @@ func Relay(c *gin.Context) {
 		NativeOpenAIChat(c)
 		return
 	}
+	if relayMode == relaymode.ChatCompletions && c.GetInt(ctxkey.Channel) == channeltype.Anthropic {
+		body, err := common.GetRequestBody(c)
+		if err == nil {
+			var fields struct {
+				Stream bool `json:"stream"`
+			}
+			if json.Unmarshal(body, &fields) == nil && !fields.Stream {
+				NativeOpenAIChatViaAnthropic(c)
+				return
+			}
+		}
+	}
 	if relayMode == relaymode.Embeddings && c.GetInt(ctxkey.Channel) == channeltype.OpenAI {
 		NativeOpenAIEmbeddings(c)
+		return
+	}
+	if relayMode == relaymode.Moderations && c.GetInt(ctxkey.Channel) == channeltype.OpenAI {
+		NativeOpenAIModerations(c)
 		return
 	}
 	if relayMode == relaymode.Completions && c.GetInt(ctxkey.Channel) == channeltype.OpenAI && c.GetString(ctxkey.SystemPrompt) == "" {

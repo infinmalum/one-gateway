@@ -17,12 +17,15 @@ import (
 )
 
 type nativeInput struct {
-	protocol        native.Protocol
-	model           string
-	action          string
-	stream          bool
-	maxOutputTokens int64
-	body            []byte
+	protocol                 native.Protocol
+	upstreamProtocol         native.Protocol
+	fallbackUpstreamProtocol native.Protocol
+	model                    string
+	action                   string
+	stream                   bool
+	maxOutputTokens          int64
+	fallbackInputTokens      int64
+	body                     []byte
 }
 
 func NativeOpenAIResponses(c *gin.Context) {
@@ -51,6 +54,14 @@ func NativeOpenAIResponses(c *gin.Context) {
 // NativeOpenAIChat forwards OpenAI channels without the legacy Chat adapter.
 // Other channel types still use their existing conversion path.
 func NativeOpenAIChat(c *gin.Context) {
+	nativeOpenAIChat(c, native.OpenAIChat)
+}
+
+func NativeOpenAIChatViaAnthropic(c *gin.Context) {
+	nativeOpenAIChat(c, native.Anthropic)
+}
+
+func nativeOpenAIChat(c *gin.Context, upstream native.Protocol) {
 	body, err := common.GetRequestBody(c)
 	if err != nil {
 		writeNativeError(c, native.OpenAIChat, http.StatusBadRequest, err)
@@ -67,8 +78,12 @@ func NativeOpenAIChat(c *gin.Context) {
 		writeNativeError(c, native.OpenAIChat, http.StatusBadRequest, errors.New("model and messages are required; token limits must not be negative"))
 		return
 	}
-	forwardNative(c, nativeInput{protocol: native.OpenAIChat, model: fields.Model, stream: fields.Stream,
-		maxOutputTokens: max(fields.MaxTokens, fields.MaxCompletion), body: body})
+	limit := max(fields.MaxTokens, fields.MaxCompletion)
+	if upstream == native.Anthropic && limit == 0 {
+		limit = 1024
+	}
+	forwardNative(c, nativeInput{protocol: native.OpenAIChat, upstreamProtocol: upstream, model: fields.Model, stream: fields.Stream,
+		maxOutputTokens: limit, body: body})
 }
 
 func NativeOpenAIEmbeddings(c *gin.Context) {
@@ -112,6 +127,27 @@ func NativeOpenAIEmbeddings(c *gin.Context) {
 		maxOutputTokens: int64(len(body)), body: body})
 }
 
+func NativeOpenAIModerations(c *gin.Context) {
+	body, err := common.GetRequestBody(c)
+	if err != nil {
+		writeNativeError(c, native.OpenAIModerations, http.StatusBadRequest, err)
+		return
+	}
+	var fields struct {
+		Model string          `json:"model"`
+		Input json.RawMessage `json:"input"`
+	}
+	if err := json.Unmarshal(body, &fields); err != nil || len(fields.Input) == 0 || string(fields.Input) == "null" {
+		writeNativeError(c, native.OpenAIModerations, http.StatusBadRequest, errors.New("input is required"))
+		return
+	}
+	if fields.Model == "" {
+		fields.Model = native.DefaultModerationModel
+	}
+	forwardNative(c, nativeInput{protocol: native.OpenAIModerations, model: fields.Model,
+		fallbackInputTokens: native.EstimateModerationInputTokens(fields.Input), body: body})
+}
+
 func NativeOpenAICompletions(c *gin.Context) {
 	body, err := common.GetRequestBody(c)
 	if err != nil {
@@ -148,7 +184,11 @@ func NativeAnthropic(c *gin.Context) {
 		writeNativeError(c, native.Anthropic, http.StatusBadRequest, errors.New("model, messages, and positive max_tokens are required"))
 		return
 	}
-	forwardNative(c, nativeInput{protocol: native.Anthropic, model: fields.Model, stream: fields.Stream, maxOutputTokens: fields.MaxTokens, body: body})
+	input := nativeInput{protocol: native.Anthropic, model: fields.Model, stream: fields.Stream, maxOutputTokens: fields.MaxTokens, body: body}
+	if !fields.Stream {
+		input.fallbackUpstreamProtocol = native.OpenAIChat
+	}
+	forwardNative(c, input)
 }
 
 func NativeGemini(c *gin.Context) {
@@ -198,9 +238,11 @@ func forwardNative(c *gin.Context, input nativeInput) {
 		}
 	}
 	result := lifecycle.Forward(c.Request.Context(), c.Writer, lifecycle.Request{
-		Protocol: input.protocol, Model: input.model, Action: input.action,
+		Protocol: input.protocol, UpstreamProtocol: input.upstreamProtocol,
+		FallbackUpstreamProtocol: input.fallbackUpstreamProtocol, Model: input.model, Action: input.action,
 		Version: version, Stream: input.stream, MaxOutputTokens: input.maxOutputTokens,
-		Body: input.body, Headers: c.Request.Header, Query: c.Request.URL.Query(),
+		FallbackInputTokens: input.fallbackInputTokens,
+		Body:                input.body, Headers: c.Request.Header, Query: c.Request.URL.Query(),
 		Channel: lifecycle.Channel{
 			ID: metadata.ChannelId, Type: metadata.ChannelType,
 			BaseURL: metadata.BaseURL, APIKey: metadata.APIKey,

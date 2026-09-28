@@ -5,7 +5,7 @@ import "net/http"
 // ErrorBody formats gateway errors in the protocol expected by the client.
 // Provider error bodies are forwarded unchanged by the transport.
 func ErrorBody(protocol Protocol, status int, message string) any {
-	if protocol == OpenAIResponses || protocol == OpenAIChat || protocol == OpenAICompletions || protocol == OpenAIEmbeddings {
+	if protocol == OpenAIResponses || protocol == OpenAIChat || protocol == OpenAICompletions || protocol == OpenAIEmbeddings || protocol == OpenAIModerations {
 		kind := "invalid_request_error"
 		switch {
 		case status == http.StatusUnauthorized:

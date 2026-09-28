@@ -23,6 +23,7 @@ import (
 	"github.com/infinmalum/one-gateway/relay/controller/validator"
 	"github.com/infinmalum/one-gateway/relay/meta"
 	relaymodel "github.com/infinmalum/one-gateway/relay/model"
+	"github.com/infinmalum/one-gateway/relay/native"
 	"github.com/infinmalum/one-gateway/relay/relaymode"
 )
 
@@ -33,7 +34,7 @@ func getAndValidateTextRequest(c *gin.Context, relayMode int) (*relaymodel.Gener
 		return nil, err
 	}
 	if relayMode == relaymode.Moderations && textRequest.Model == "" {
-		textRequest.Model = "text-moderation-latest"
+		textRequest.Model = native.DefaultModerationModel
 	}
 	if relayMode == relaymode.Embeddings && textRequest.Model == "" {
 		textRequest.Model = c.Param("model")

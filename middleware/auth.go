@@ -181,6 +181,9 @@ func shouldCheckModel(c *gin.Context) bool {
 	if strings.HasSuffix(c.Request.URL.Path, "embeddings") {
 		return true
 	}
+	if c.Request.URL.Path == "/v1/moderations" {
+		return true
+	}
 	if strings.HasPrefix(c.Request.URL.Path, "/v1/images") {
 		return true
 	}

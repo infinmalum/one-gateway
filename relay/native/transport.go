@@ -19,6 +19,7 @@ const (
 	OpenAIChat        Protocol = "openai_chat"
 	OpenAICompletions Protocol = "openai_completions"
 	OpenAIEmbeddings  Protocol = "openai_embeddings"
+	OpenAIModerations Protocol = "openai_moderations"
 	OpenAIResponses   Protocol = "openai_responses"
 )
 
@@ -95,6 +96,12 @@ func BuildRequest(ctx context.Context, input Request) (*http.Request, error) {
 		if err != nil {
 			return nil, err
 		}
+	case OpenAIModerations:
+		path = "/v1/moderations"
+		body, err = prepareOpenAIModerationsBody(body, input.Model)
+		if err != nil {
+			return nil, err
+		}
 	case OpenAICompletions:
 		path = "/v1/completions"
 		body, stream, err = prepareOpenAICompletionsBody(body, input.Model)
@@ -139,13 +146,34 @@ func BuildRequest(ctx context.Context, input Request) (*http.Request, error) {
 		}
 	case Gemini:
 		req.Header.Set("x-goog-api-key", input.APIKey)
-	case OpenAIResponses, OpenAIChat, OpenAICompletions, OpenAIEmbeddings:
+	case OpenAIResponses, OpenAIChat, OpenAICompletions, OpenAIEmbeddings, OpenAIModerations:
 		req.Header.Set("Authorization", "Bearer "+input.APIKey)
 		if beta := input.Headers.Get("OpenAI-Beta"); beta != "" {
 			req.Header.Set("OpenAI-Beta", beta)
 		}
 	}
 	return req, nil
+}
+
+func prepareOpenAIModerationsBody(body []byte, model string) ([]byte, error) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(body, &fields); err != nil || fields == nil {
+		return nil, errors.New("invalid OpenAI Moderations JSON request")
+	}
+	if len(fields["input"]) == 0 || string(fields["input"]) == "null" {
+		return nil, errors.New("OpenAI Moderations input is required")
+	}
+	var requestedModel string
+	if raw, ok := fields["model"]; ok {
+		if err := json.Unmarshal(raw, &requestedModel); err != nil {
+			return nil, errors.New("OpenAI Moderations model must be a string")
+		}
+	}
+	if model == "" || model == requestedModel {
+		return body, nil
+	}
+	fields["model"], _ = json.Marshal(model)
+	return json.Marshal(fields)
 }
 
 func prepareOpenAICompletionsBody(body []byte, model string) ([]byte, bool, error) {

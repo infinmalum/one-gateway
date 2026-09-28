@@ -2,6 +2,7 @@ package lifecycle
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"github.com/infinmalum/one-gateway/common/logger"
 	"github.com/infinmalum/one-gateway/model"
 	"github.com/infinmalum/one-gateway/relay/billing"
+	"github.com/infinmalum/one-gateway/relay/bridge"
 	"github.com/infinmalum/one-gateway/relay/channeltype"
 	"github.com/infinmalum/one-gateway/relay/native"
 )
@@ -38,19 +40,24 @@ type Principal struct {
 }
 
 type Request struct {
-	Protocol        native.Protocol
-	Model           string
-	Action          string
-	Version         string
-	Stream          bool
-	MaxOutputTokens int64
-	Body            []byte
-	Headers         http.Header
-	Query           url.Values
-	Channel         Channel
-	Principal       Principal
-	RetryLimit      int
-	HTTPClient      *http.Client
+	Protocol                 native.Protocol
+	UpstreamProtocol         native.Protocol
+	FallbackUpstreamProtocol native.Protocol
+	Model                    string
+	Action                   string
+	Version                  string
+	Stream                   bool
+	MaxOutputTokens          int64
+	// FallbackInputTokens is used by operations whose successful response may
+	// omit usage, such as Moderations. A provider usage report takes precedence.
+	FallbackInputTokens int64
+	Body                []byte
+	Headers             http.Header
+	Query               url.Values
+	Channel             Channel
+	Principal           Principal
+	RetryLimit          int
+	HTTPClient          *http.Client
 }
 
 type HTTPError struct {
@@ -58,10 +65,14 @@ type HTTPError struct {
 	Message string
 }
 
-// Forward executes same-protocol HTTP requests. It owns reservation, retries,
-// response copying, and settlement; the caller owns request parsing and the
-// client protocol's error envelope.
+// Forward executes native passthrough and explicit JSON protocol conversions.
+// It owns reservation, retries, response copying, and settlement; the caller
+// owns request parsing and the client protocol's error envelope.
 func Forward(ctx context.Context, dst http.ResponseWriter, input Request) *HTTPError {
+	upstreamProtocol := input.Protocol
+	if input.UpstreamProtocol != "" {
+		upstreamProtocol = input.UpstreamProtocol
+	}
 	if input.Principal.Group == "" {
 		group, err := model.CacheGetUserGroup(input.Principal.UserID)
 		if err != nil {
@@ -70,11 +81,32 @@ func Forward(ctx context.Context, dst http.ResponseWriter, input Request) *HTTPE
 		input.Principal.Group = group
 	}
 	if input.Channel.ID == 0 {
-		selected, err := selectInitial(input)
+		selected, err := selectInitial(input, upstreamProtocol)
 		if err != nil {
-			return err
+			if input.FallbackUpstreamProtocol == "" || (err.Status != http.StatusServiceUnavailable && !(input.Principal.SpecificChannel && err.Status == http.StatusBadRequest)) {
+				return err
+			}
+			var fallbackErr *HTTPError
+			selected, fallbackErr = selectInitial(input, input.FallbackUpstreamProtocol)
+			if fallbackErr != nil {
+				return err
+			}
+			upstreamProtocol = input.FallbackUpstreamProtocol
 		}
 		input.Channel = selected
+	}
+	if input.Channel.Type != requiredChannelType(upstreamProtocol) && input.FallbackUpstreamProtocol != "" && input.Channel.Type == requiredChannelType(input.FallbackUpstreamProtocol) {
+		upstreamProtocol = input.FallbackUpstreamProtocol
+	}
+	if input.Channel.Type != requiredChannelType(upstreamProtocol) {
+		return &HTTPError{http.StatusBadRequest, "selected channel does not support this protocol"}
+	}
+	converter, err := bridge.For(input.Protocol, upstreamProtocol)
+	if err != nil {
+		return &HTTPError{http.StatusUnprocessableEntity, err.Error()}
+	}
+	if converter != nil && input.Stream {
+		return &HTTPError{http.StatusUnprocessableEntity, "streaming protocol conversion is not supported"}
 	}
 	httpClient := input.HTTPClient
 	if httpClient == nil {
@@ -104,10 +136,18 @@ func Forward(ctx context.Context, dst http.ResponseWriter, input Request) *HTTPE
 		if channel.APIVersion != "" {
 			version = channel.APIVersion
 		}
+		body := input.Body
+		if converter != nil {
+			var err error
+			body, err = converter.Request(body, mappedModel)
+			if err != nil {
+				return &HTTPError{http.StatusUnprocessableEntity, err.Error()}
+			}
+		}
 		req, err := native.BuildRequest(ctx, native.Request{
-			Protocol: input.Protocol, BaseURL: channel.BaseURL, Version: version,
+			Protocol: upstreamProtocol, BaseURL: channel.BaseURL, Version: version,
 			Model: mappedModel, Action: input.Action, APIKey: channel.APIKey,
-			SystemPrompt: channel.SystemPrompt, Body: input.Body,
+			SystemPrompt: channel.SystemPrompt, Body: body,
 			Headers: input.Headers, Query: input.Query,
 		})
 		if err != nil {
@@ -117,7 +157,7 @@ func Forward(ctx context.Context, dst http.ResponseWriter, input Request) *HTTPE
 			UserID: input.Principal.UserID, TokenID: input.Principal.TokenID,
 			ChannelID: channel.ID, ChannelType: channel.Type,
 			TokenName: input.Principal.TokenName, ModelName: mappedModel,
-			Group: input.Principal.Group, SystemPromptReset: channel.SystemPrompt != "",
+			Group: input.Principal.Group, SystemPromptReset: channel.SystemPrompt != "" && supportsSystemPrompt(upstreamProtocol),
 		}, input.MaxOutputTokens)
 		if err != nil {
 			return &HTTPError{http.StatusForbidden, err.Error()}
@@ -145,6 +185,12 @@ func Forward(ctx context.Context, dst http.ResponseWriter, input Request) *HTTPE
 					continue
 				}
 			}
+			if converter != nil {
+				message := convertedUpstreamError(response.Body)
+				_ = response.Body.Close()
+				copyHeaders(dst.Header(), response.Header)
+				return &HTTPError{response.StatusCode, message}
+			}
 			copyHeaders(dst.Header(), response.Header)
 			dst.WriteHeader(response.StatusCode)
 			_, _ = io.Copy(dst, response.Body)
@@ -156,10 +202,38 @@ func Forward(ctx context.Context, dst http.ResponseWriter, input Request) *HTTPE
 			_ = response.Body.Close()
 			return &HTTPError{http.StatusBadGateway, "upstream did not return an event stream"}
 		}
+		if converter != nil {
+			const maxConvertedResponse = 16 << 20
+			body, readErr := io.ReadAll(io.LimitReader(response.Body, maxConvertedResponse+1))
+			_ = response.Body.Close()
+			if readErr != nil || len(body) > maxConvertedResponse {
+				reservation.Settle(settlementContext, native.Usage{}, false, true)
+				return &HTTPError{http.StatusBadGateway, "upstream response could not be read"}
+			}
+			converted, usage, convertErr := converter.Response(body, input.Model)
+			if convertErr != nil {
+				reservation.Settle(settlementContext, native.Usage{}, false, true)
+				return &HTTPError{http.StatusBadGateway, convertErr.Error()}
+			}
+			copyHeaders(dst.Header(), response.Header)
+			dst.Header().Set("Content-Type", "application/json")
+			dst.Header().Del("Content-Length")
+			dst.WriteHeader(http.StatusOK)
+			_, writeErr := dst.Write(converted)
+			reservation.Settle(settlementContext, usage, false, writeErr != nil || ctx.Err() != nil)
+			if writeErr != nil {
+				logger.Errorf(settlementContext, "converted response interrupted on channel %d: %v", channel.ID, writeErr)
+			}
+			return nil
+		}
 		copyHeaders(dst.Header(), response.Header)
 		dst.WriteHeader(response.StatusCode)
 		usage, copyErr := native.CopyResponse(dst, response.Body, input.Protocol, input.Stream)
 		_ = response.Body.Close()
+		if copyErr == nil && usage.Complete && !usage.Seen && input.FallbackInputTokens > 0 {
+			usage.Input = input.FallbackInputTokens
+			usage.Seen = true
+		}
 		interrupted := copyErr != nil || ctx.Err() != nil || (input.Stream && !usage.Complete)
 		reservation.Settle(settlementContext, usage, input.Stream, interrupted)
 		if copyErr != nil {
@@ -169,8 +243,17 @@ func Forward(ctx context.Context, dst http.ResponseWriter, input Request) *HTTPE
 	}
 }
 
-func selectInitial(input Request) (Channel, *HTTPError) {
-	requiredType := requiredChannelType(input.Protocol)
+func supportsSystemPrompt(protocol native.Protocol) bool {
+	switch protocol {
+	case native.Anthropic, native.Gemini, native.OpenAIChat, native.OpenAIResponses:
+		return true
+	default:
+		return false
+	}
+}
+
+func selectInitial(input Request, upstreamProtocol native.Protocol) (Channel, *HTTPError) {
+	requiredType := requiredChannelType(upstreamProtocol)
 	if requiredType < 0 {
 		return Channel{}, &HTTPError{http.StatusBadRequest, "unsupported native protocol"}
 	}
@@ -194,7 +277,7 @@ func selectInitial(input Request) (Channel, *HTTPError) {
 		selected, err = model.GetRandomSatisfiedChannelByType(input.Principal.Group, input.Model, requiredType, false)
 		if err != nil || selected == nil {
 			label := "OpenAI"
-			switch input.Protocol {
+			switch upstreamProtocol {
 			case native.Anthropic:
 				label = "Anthropic"
 			case native.Gemini:
@@ -210,13 +293,27 @@ func selectInitial(input Request) (Channel, *HTTPError) {
 	return channel, nil
 }
 
+func convertedUpstreamError(body io.Reader) string {
+	const maxError = 64 << 10
+	data, _ := io.ReadAll(io.LimitReader(body, maxError))
+	var result struct {
+		Error struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if json.Unmarshal(data, &result) == nil && result.Error.Message != "" {
+		return result.Error.Message
+	}
+	return "upstream request failed"
+}
+
 func requiredChannelType(protocol native.Protocol) int {
 	switch protocol {
 	case native.Anthropic:
 		return channeltype.Anthropic
 	case native.Gemini:
 		return channeltype.Gemini
-	case native.OpenAIChat, native.OpenAICompletions, native.OpenAIEmbeddings, native.OpenAIResponses:
+	case native.OpenAIChat, native.OpenAICompletions, native.OpenAIEmbeddings, native.OpenAIModerations, native.OpenAIResponses:
 		return channeltype.OpenAI
 	default:
 		return -1

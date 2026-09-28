@@ -85,8 +85,12 @@ var ModelRatio = map[string]float64{
 	"text-search-ada-doc-001": 10,
 	"text-moderation-stable":  0.1,
 	"text-moderation-latest":  0.1,
-	"dall-e-2":                0.02 * USD, // $0.016 - $0.020 / image
-	"dall-e-3":                0.04 * USD, // $0.040 - $0.120 / image
+
+	"omni-moderation-latest":     0.1,
+	"omni-moderation-2024-09-26": 0.1,
+
+	"dall-e-2": 0.02 * USD, // $0.016 - $0.020 / image
+	"dall-e-3": 0.04 * USD, // $0.040 - $0.120 / image
 	// https://docs.anthropic.com/en/docs/about-claude/models
 	"claude-instant-1.2":         0.8 / 1000 * USD,
 	"claude-2.0":                 8.0 / 1000 * USD,

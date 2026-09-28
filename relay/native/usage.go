@@ -128,6 +128,18 @@ func (u *Usage) observe(protocol Protocol, data []byte) {
 			u.Input = max(result.Usage.PromptTokens, result.Usage.TotalTokens)
 			u.Seen = true
 		}
+	case OpenAIModerations:
+		var result struct {
+			Usage *struct {
+				InputTokens  int64 `json:"input_tokens"`
+				PromptTokens int64 `json:"prompt_tokens"`
+				TotalTokens  int64 `json:"total_tokens"`
+			} `json:"usage"`
+		}
+		if json.Unmarshal(data, &result) == nil && result.Usage != nil {
+			u.Input = max(result.Usage.InputTokens, result.Usage.PromptTokens, result.Usage.TotalTokens)
+			u.Seen = true
+		}
 	}
 }
 
