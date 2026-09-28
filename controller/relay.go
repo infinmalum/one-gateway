@@ -14,10 +14,10 @@ import (
 	"github.com/infinmalum/one-gateway/common/helper"
 	"github.com/infinmalum/one-gateway/common/logger"
 	"github.com/infinmalum/one-gateway/middleware"
-	dbmodel "github.com/infinmalum/one-gateway/model"
 	"github.com/infinmalum/one-gateway/monitor"
 	"github.com/infinmalum/one-gateway/relay/channeltype"
 	"github.com/infinmalum/one-gateway/relay/controller"
+	"github.com/infinmalum/one-gateway/relay/lifecycle"
 	"github.com/infinmalum/one-gateway/relay/model"
 	"github.com/infinmalum/one-gateway/relay/relaymode"
 )
@@ -81,7 +81,7 @@ func Relay(c *gin.Context) {
 		monitor.Emit(channelId, true)
 		return
 	}
-	lastFailedChannelId := channelId
+	tried := map[int]bool{channelId: true}
 	channelName := c.GetString(ctxkey.ChannelName)
 	group := c.GetString(ctxkey.Group)
 	originalModel := c.GetString(ctxkey.OriginalModel)
@@ -93,17 +93,21 @@ func Relay(c *gin.Context) {
 		retryTimes = 0
 	}
 	for i := retryTimes; i > 0; i-- {
-		channel, err := dbmodel.CacheGetRandomSatisfiedChannel(group, originalModel, i != retryTimes)
-		if err != nil {
-			logger.Errorf(ctx, "CacheGetRandomSatisfiedChannel failed: %+v", err)
+		channel, selectErr := lifecycle.SelectChannel(lifecycle.Selection{
+			Group: group, Model: originalModel, Type: -1, IgnorePriority: i != retryTimes, Excluded: tried,
+		})
+		if selectErr != nil {
+			logger.Errorf(ctx, "retry channel selection failed: %s", selectErr.Message)
 			break
 		}
 		logger.Infof(ctx, "using channel #%d to retry (remain times %d)", channel.Id, i)
-		if channel.Id == lastFailedChannelId {
-			continue
-		}
+		tried[channel.Id] = true
 		middleware.SetupContextForSelectedChannel(c, channel, originalModel)
 		requestBody, err := common.GetRequestBody(c)
+		if err != nil {
+			logger.Errorf(ctx, "failed to replay request body: %v", err)
+			break
+		}
 		c.Request.Body = io.NopCloser(bytes.NewBuffer(requestBody))
 		bizErr = relayHelper(c, relayMode)
 		if bizErr == nil {
@@ -111,9 +115,11 @@ func Relay(c *gin.Context) {
 			return
 		}
 		channelId := c.GetInt(ctxkey.ChannelId)
-		lastFailedChannelId = channelId
 		channelName := c.GetString(ctxkey.ChannelName)
 		go processChannelRelayError(ctx, userId, channelId, channelName, *bizErr)
+		if !shouldRetry(c, bizErr.StatusCode) {
+			break
+		}
 	}
 	if bizErr != nil {
 		if c.Writer.Written() {
@@ -132,25 +138,8 @@ func Relay(c *gin.Context) {
 }
 
 func shouldRetry(c *gin.Context, statusCode int) bool {
-	if c.Writer.Written() {
-		return false
-	}
-	if _, ok := c.Get(ctxkey.SpecificChannelId); ok {
-		return false
-	}
-	if statusCode == http.StatusTooManyRequests {
-		return true
-	}
-	if statusCode/100 == 5 {
-		return true
-	}
-	if statusCode == http.StatusBadRequest {
-		return false
-	}
-	if statusCode/100 == 2 {
-		return false
-	}
-	return true
+	_, pinned := c.Get(ctxkey.SpecificChannelId)
+	return lifecycle.Retryable(statusCode, c.Writer.Written(), pinned, c.Request.Context().Err() != nil)
 }
 
 func processChannelRelayError(ctx context.Context, userId int, channelId int, channelName string, err model.ErrorWithStatusCode) {

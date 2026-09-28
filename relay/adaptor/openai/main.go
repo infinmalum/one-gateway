@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -80,17 +81,16 @@ func StreamHandler(c *gin.Context, resp *http.Response, relayMode int) (*model.E
 		}
 	}
 
-	if err := scanner.Err(); err != nil {
-		logger.SysError("error reading stream: " + err.Error())
-	}
-
-	if !doneRendered {
-		render.Done(c)
-	}
-
+	scanErr := scanner.Err()
 	err := resp.Body.Close()
 	if err != nil {
-		return ErrorWrapper(err, "close_response_body_failed", http.StatusInternalServerError), "", nil
+		return ErrorWrapper(err, "close_response_body_failed", http.StatusBadGateway), responseText, usage
+	}
+	if scanErr != nil {
+		return ErrorWrapper(scanErr, "stream_read_failed", http.StatusBadGateway), responseText, usage
+	}
+	if !doneRendered {
+		return ErrorWrapper(errors.New("upstream stream ended without [DONE]"), "stream_incomplete", http.StatusBadGateway), responseText, usage
 	}
 
 	return nil, responseText, usage

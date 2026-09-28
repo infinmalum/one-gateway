@@ -145,14 +145,22 @@ silently dropped.
   already started.
 - [x] Verify the migrated native paths settle cancellation, upstream errors,
   retries, and stream completion once, logging the selected channel.
-- [ ] Move request metadata, compatible-channel selection, retry policy, quota
-  reservation/settlement, and error mapping into one protocol-neutral layer.
-  Initial selection and retry for native routes now live in `relay/lifecycle`;
-  legacy routes and request metadata still need migration.
-- [ ] Remove direct dependencies on Gin and `GeneralOpenAIRequest` from provider
-  conversion interfaces.
-- [ ] Gate: a cancellation, upstream error, retry, or stream completion settles
-  quota once and logs the channel actually used across every retained route.
+- [x] Move request metadata, compatible-channel selection, retry policy, quota
+  reservation/settlement, and upstream error extraction into shared relay
+  components. `relay/meta` no longer imports Gin; `relay/ginmeta` extracts its
+  HTTP values. Native and legacy routes use the same channel selector, retry
+  policy, and once-only quota reservation. Client protocol error envelopes
+  remain at their HTTP boundaries.
+- [x] Remove direct dependencies on Gin and `GeneralOpenAIRequest` from provider
+  conversion interfaces. `ConversionInput` carries the parsed legacy request,
+  API key, mode, and transport values; the old request name remains an alias
+  for legacy helpers until phase 5 removes them.
+- [x] Gate: cancellation, upstream errors, retries, and complete or truncated
+  streams settle once on the actual channel across retained metered endpoint
+  families. Offline route fixtures cover Chat, Completions, Embeddings,
+  Moderations, Edits, images, and all three audio routes; native fixtures
+  cover Responses, Messages, Gemini, and native OpenAI operations. The proxy
+  route is explicitly unmetered and its no-charge behavior is tested.
 
 ### 3. OpenAI Chat and Anthropic Messages
 
@@ -240,11 +248,16 @@ forwarding remains the default for same-protocol requests.
   another matching channel before any response is forwarded. Cross-protocol
   routing beyond the supported Chat/Messages subset and native
   File/Live/Interactions endpoints remain.
-- Phase 2: native request execution, initial compatible-channel selection,
-  retry, and quota settlement now run in a Gin-free lifecycle package. Legacy
-  routes still need migration before the lifecycle is fully shared. Operations
-  without upstream usage can provide a fallback input estimate; image
-  Moderations keep the reservation when no usage is reported.
+- Phase 2: native and legacy routes share protocol-neutral channel selection,
+  retry policy, quota reservations, and upstream error extraction. The
+  metadata type and provider conversion interfaces no longer depend on Gin.
+  Legacy image and audio routes now reserve before forwarding and refund on
+  upstream failures; incomplete legacy OpenAI-compatible streams no longer
+  synthesize `[DONE]`. Legacy controllers still implement endpoint-specific
+  body handling until phase 5 migrates them. The proxy route remains
+  intentionally unmetered. Operations without upstream usage can provide a
+  fallback input estimate; image Moderations keep the reservation when no
+  usage is reported.
 - Phase 3: OpenAI channels now route Chat Completions through the native
   lifecycle. The path preserves unmapped JSON and SSE bytes, replaces upstream
   credentials, applies model and system prompt configuration, retries before

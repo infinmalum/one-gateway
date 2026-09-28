@@ -9,12 +9,12 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/pkg/errors"
 	"github.com/infinmalum/one-gateway/common"
 	"github.com/infinmalum/one-gateway/common/render"
 	"github.com/infinmalum/one-gateway/relay/adaptor/openai"
-	"github.com/infinmalum/one-gateway/relay/meta"
+	"github.com/infinmalum/one-gateway/relay/ginmeta"
 	"github.com/infinmalum/one-gateway/relay/model"
+	"github.com/pkg/errors"
 )
 
 func ChatHandler(c *gin.Context, resp *http.Response) (
@@ -46,7 +46,7 @@ func ChatHandler(c *gin.Context, resp *http.Response) (
 				return errors.Wrap(err, "new request")
 			}
 
-			taskReq.Header.Set("Authorization", "Bearer "+meta.GetByContext(c).APIKey)
+			taskReq.Header.Set("Authorization", "Bearer "+ginmeta.Get(c).APIKey)
 			taskResp, err := http.DefaultClient.Do(taskReq)
 			if err != nil {
 				return errors.Wrap(err, "get task")
@@ -88,7 +88,7 @@ func ChatHandler(c *gin.Context, resp *http.Response) (
 				return errors.Wrap(err, "chat stream handler")
 			}
 
-			ctxMeta := meta.GetByContext(c)
+			ctxMeta := ginmeta.Get(c)
 			usage = openai.ResponseText2Usage(responseText,
 				ctxMeta.ActualModelName, ctxMeta.PromptTokens)
 			return nil
@@ -120,7 +120,7 @@ func chatStreamHandler(c *gin.Context, streamUrl string) (responseText string, e
 		return "", errors.Wrap(err, "new request to stream")
 	}
 
-	streamReq.Header.Set("Authorization", "Bearer "+meta.GetByContext(c).APIKey)
+	streamReq.Header.Set("Authorization", "Bearer "+ginmeta.Get(c).APIKey)
 	streamReq.Header.Set("Accept", "text/event-stream")
 	streamReq.Header.Set("Cache-Control", "no-store")
 

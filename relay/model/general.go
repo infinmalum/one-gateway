@@ -21,7 +21,9 @@ type StreamOptions struct {
 	IncludeUsage bool `json:"include_usage,omitempty"`
 }
 
-type GeneralOpenAIRequest struct {
+// TextRequest is the parsed request used by legacy provider converters.
+// Protocol-specific native converters operate on raw JSON in relay/bridge.
+type TextRequest struct {
 	// https://platform.openai.com/docs/api-reference/chat/create
 	Messages            []Message       `json:"messages,omitempty"`
 	Model               string          `json:"model,omitempty"`
@@ -68,7 +70,27 @@ type GeneralOpenAIRequest struct {
 	NumCtx      int    `json:"num_ctx,omitempty"`
 }
 
-func (r GeneralOpenAIRequest) ParseInput() []string {
+// GeneralOpenAIRequest remains as a compatibility name until the legacy
+// controller and its request validators are removed.
+type GeneralOpenAIRequest = TextRequest
+
+// ConversionInput contains only data a provider's request converter needs.
+// Values are returned to the legacy transport after conversion.
+type ConversionInput struct {
+	Mode    int
+	Request *TextRequest
+	APIKey  string
+	Values  map[string]any
+}
+
+func (in *ConversionInput) Set(key string, value any) {
+	if in.Values == nil {
+		in.Values = make(map[string]any)
+	}
+	in.Values[key] = value
+}
+
+func (r TextRequest) ParseInput() []string {
 	if r.Input == nil {
 		return nil
 	}

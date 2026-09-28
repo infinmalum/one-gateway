@@ -2,7 +2,6 @@ package controller
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"math"
 	"net/http"
@@ -18,6 +17,7 @@ import (
 	"github.com/infinmalum/one-gateway/common/logger"
 	"github.com/infinmalum/one-gateway/model"
 	"github.com/infinmalum/one-gateway/relay/adaptor/openai"
+	"github.com/infinmalum/one-gateway/relay/billing"
 	billingratio "github.com/infinmalum/one-gateway/relay/billing/ratio"
 	"github.com/infinmalum/one-gateway/relay/channeltype"
 	"github.com/infinmalum/one-gateway/relay/controller/validator"
@@ -66,39 +66,18 @@ func getPreConsumedQuota(textRequest *relaymodel.GeneralOpenAIRequest, promptTok
 	return int64(float64(preConsumedTokens) * ratio)
 }
 
-func preConsumeQuota(ctx context.Context, textRequest *relaymodel.GeneralOpenAIRequest, promptTokens int, ratio float64, meta *meta.Meta) (int64, *relaymodel.ErrorWithStatusCode) {
+func preConsumeQuota(ctx context.Context, textRequest *relaymodel.GeneralOpenAIRequest, promptTokens int, ratio float64, meta *meta.Meta) (*billing.Reservation, *relaymodel.ErrorWithStatusCode) {
 	preConsumedQuota := getPreConsumedQuota(textRequest, promptTokens, ratio)
-
-	userQuota, err := model.CacheGetUserQuota(ctx, meta.UserId)
+	reservation, err := billing.Reserve(ctx, meta.UserId, meta.TokenId, preConsumedQuota)
 	if err != nil {
-		return preConsumedQuota, openai.ErrorWrapper(err, "get_user_quota_failed", http.StatusInternalServerError)
+		return nil, openai.ErrorWrapper(err, "reserve_quota_failed", http.StatusForbidden)
 	}
-	if userQuota-preConsumedQuota < 0 {
-		return preConsumedQuota, openai.ErrorWrapper(errors.New("user quota is not enough"), "insufficient_user_quota", http.StatusForbidden)
-	}
-	if preConsumedQuota > 0 {
-		err := model.PreConsumeTokenQuota(meta.TokenId, preConsumedQuota)
-		if err != nil {
-			return preConsumedQuota, openai.ErrorWrapper(err, "pre_consume_token_quota_failed", http.StatusForbidden)
-		}
-		err = model.CacheDecreaseUserQuota(meta.UserId, preConsumedQuota)
-		if err != nil {
-			if refundErr := model.PostConsumeTokenQuota(meta.TokenId, -preConsumedQuota); refundErr != nil {
-				logger.Error(ctx, "failed to refund reserved quota: "+refundErr.Error())
-			}
-			if refreshErr := model.CacheRefreshUserQuota(context.WithoutCancel(ctx), meta.UserId); refreshErr != nil {
-				logger.Error(ctx, "failed to refresh user quota after refund: "+refreshErr.Error())
-			}
-			return preConsumedQuota, openai.ErrorWrapper(err, "decrease_user_quota_failed", http.StatusInternalServerError)
-		}
-	}
-	return preConsumedQuota, nil
+	return reservation, nil
 }
 
-func postConsumeQuota(ctx context.Context, usage *relaymodel.Usage, meta *meta.Meta, textRequest *relaymodel.GeneralOpenAIRequest, ratio float64, preConsumedQuota int64, modelRatio float64, groupRatio float64, systemPromptReset bool) {
+func postConsumeQuota(ctx context.Context, usage *relaymodel.Usage, meta *meta.Meta, textRequest *relaymodel.GeneralOpenAIRequest, ratio float64, reservation *billing.Reservation, modelRatio float64, groupRatio float64, systemPromptReset, interrupted bool) {
 	if usage == nil {
-		logger.Error(ctx, "usage is nil, which is unexpected")
-		return
+		usage = &relaymodel.Usage{}
 	}
 	var quota int64
 	completionRatio := billingratio.GetCompletionRatio(textRequest.Model, meta.ChannelType)
@@ -114,17 +93,14 @@ func postConsumeQuota(ctx context.Context, usage *relaymodel.Usage, meta *meta.M
 		// we cannot just return, because we may have to return the pre-consumed quota
 		quota = 0
 	}
-	quotaDelta := quota - preConsumedQuota
-	err := model.PostConsumeTokenQuota(meta.TokenId, quotaDelta)
-	if err != nil {
-		logger.Error(ctx, "error consuming token remain quota: "+err.Error())
-		quota = preConsumedQuota
+	if interrupted {
+		quota = max(quota, reservation.Reserved)
 	}
-	err = model.CacheRefreshUserQuota(ctx, meta.UserId)
-	if err != nil {
-		logger.Error(ctx, "error update user quota cache: "+err.Error())
-	}
+	quota = reservation.Settle(ctx, quota)
 	logContent := fmt.Sprintf("倍率：%.2f × %.2f × %.2f", modelRatio, groupRatio, completionRatio)
+	if interrupted {
+		logContent += "; response interrupted"
+	}
 	model.RecordConsumeLog(ctx, &model.Log{
 		UserId:            meta.UserId,
 		ChannelId:         meta.ChannelId,

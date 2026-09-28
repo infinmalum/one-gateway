@@ -2,7 +2,6 @@ package lifecycle
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -209,7 +208,7 @@ func Forward(ctx context.Context, dst http.ResponseWriter, input Request) *HTTPE
 				_ = response.Body.Close()
 				return &HTTPError{http.StatusBadGateway, "upstream redirect is not allowed"}
 			}
-			if response.StatusCode == http.StatusTooManyRequests || response.StatusCode >= 500 {
+			if Retryable(response.StatusCode, false, input.Principal.SpecificChannel, ctx.Err() != nil) {
 				if next, ok := selectRetry(ctx, input, channel, tried, &retries); ok {
 					_ = response.Body.Close()
 					channel = next
@@ -217,8 +216,7 @@ func Forward(ctx context.Context, dst http.ResponseWriter, input Request) *HTTPE
 				}
 			}
 			if converter != nil {
-				message := convertedUpstreamError(response.Body)
-				_ = response.Body.Close()
+				message := ReadUpstreamError(response).Message
 				copyHeaders(dst.Header(), response.Header)
 				return &HTTPError{response.StatusCode, message}
 			}
@@ -318,25 +316,16 @@ func selectInitial(input Request, upstreamProtocol native.Protocol) (Channel, *H
 	if requiredType < 0 {
 		return Channel{}, &HTTPError{http.StatusBadRequest, "unsupported native protocol"}
 	}
-	var selected *model.Channel
-	var err error
+	specificID := 0
 	if input.Principal.SpecificChannel {
-		if input.Principal.SpecificChannelID <= 0 {
+		specificID = input.Principal.SpecificChannelID
+		if specificID <= 0 {
 			return Channel{}, &HTTPError{http.StatusBadRequest, "invalid channel ID"}
 		}
-		selected, err = model.GetChannelById(input.Principal.SpecificChannelID, true)
-		if err != nil || selected == nil {
-			return Channel{}, &HTTPError{http.StatusBadRequest, "invalid channel ID"}
-		}
-		if selected.Status != model.ChannelStatusEnabled {
-			return Channel{}, &HTTPError{http.StatusForbidden, "selected channel is disabled"}
-		}
-		if selected.Type != requiredType {
-			return Channel{}, &HTTPError{http.StatusBadRequest, "selected channel does not support this protocol"}
-		}
-	} else {
-		selected, err = model.GetRandomSatisfiedChannelByType(input.Principal.Group, input.Model, requiredType, false)
-		if err != nil || selected == nil {
+	}
+	selected, selectErr := SelectChannel(Selection{Group: input.Principal.Group, Model: input.Model, Type: requiredType, SpecificID: specificID})
+	if selectErr != nil {
+		if selectErr.Status == http.StatusServiceUnavailable {
 			label := "OpenAI"
 			switch upstreamProtocol {
 			case native.Anthropic:
@@ -344,28 +333,16 @@ func selectInitial(input Request, upstreamProtocol native.Protocol) (Channel, *H
 			case native.Gemini:
 				label = "Gemini"
 			}
-			return Channel{}, &HTTPError{http.StatusServiceUnavailable, "no compatible " + label + " channel for this model"}
+			selectErr.Message = "no compatible " + label + " channel for this model"
 		}
+		return Channel{}, selectErr
 	}
+	var err error
 	channel, err := channelFromModel(selected)
 	if err != nil {
 		return Channel{}, &HTTPError{http.StatusInternalServerError, "failed to load channel configuration"}
 	}
 	return channel, nil
-}
-
-func convertedUpstreamError(body io.Reader) string {
-	const maxError = 64 << 10
-	data, _ := io.ReadAll(io.LimitReader(body, maxError))
-	var result struct {
-		Error struct {
-			Message string `json:"message"`
-		} `json:"error"`
-	}
-	if json.Unmarshal(data, &result) == nil && result.Error.Message != "" {
-		return result.Error.Message
-	}
-	return "upstream request failed"
 }
 
 func requiredChannelType(protocol native.Protocol) int {
@@ -385,8 +362,8 @@ func selectRetry(ctx context.Context, input Request, failed Channel, tried map[i
 	if *remaining <= 0 || ctx.Err() != nil || input.Principal.SpecificChannel {
 		return Channel{}, false
 	}
-	selected, err := model.GetRandomSatisfiedChannelByTypeExcluding(input.Principal.Group, input.Model, failed.Type, false, tried)
-	if err != nil {
+	selected, selectErr := SelectChannel(Selection{Group: input.Principal.Group, Model: input.Model, Type: failed.Type, Excluded: tried})
+	if selectErr != nil {
 		return Channel{}, false
 	}
 	next, err := channelFromModel(selected)

@@ -16,20 +16,19 @@ import (
 	"github.com/infinmalum/one-gateway/common/client"
 	"github.com/infinmalum/one-gateway/common/config"
 	"github.com/infinmalum/one-gateway/common/ctxkey"
-	"github.com/infinmalum/one-gateway/common/logger"
 	"github.com/infinmalum/one-gateway/model"
 	"github.com/infinmalum/one-gateway/relay/adaptor/openai"
 	"github.com/infinmalum/one-gateway/relay/billing"
 	billingratio "github.com/infinmalum/one-gateway/relay/billing/ratio"
 	"github.com/infinmalum/one-gateway/relay/channeltype"
-	"github.com/infinmalum/one-gateway/relay/meta"
+	"github.com/infinmalum/one-gateway/relay/ginmeta"
 	relaymodel "github.com/infinmalum/one-gateway/relay/model"
 	"github.com/infinmalum/one-gateway/relay/relaymode"
 )
 
 func RelayAudioHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatusCode {
 	ctx := c.Request.Context()
-	meta := meta.GetByContext(c)
+	meta := ginmeta.Get(c)
 	audioModel := "whisper-1"
 
 	tokenId := c.GetInt(ctxkey.TokenId)
@@ -66,46 +65,29 @@ func RelayAudioHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 	default:
 		preConsumedQuota = int64(float64(config.PreConsumedQuota) * ratio)
 	}
-	userQuota, err := model.CacheGetUserQuota(ctx, userId)
+	reservation, err := billing.Reserve(ctx, userId, tokenId, preConsumedQuota)
 	if err != nil {
-		return openai.ErrorWrapper(err, "get_user_quota_failed", http.StatusInternalServerError)
+		return openai.ErrorWrapper(err, "reserve_quota_failed", http.StatusForbidden)
 	}
-
-	// Check if user quota is enough
-	if userQuota-preConsumedQuota < 0 {
-		return openai.ErrorWrapper(errors.New("user quota is not enough"), "insufficient_user_quota", http.StatusForbidden)
-	}
-	err = model.CacheDecreaseUserQuota(userId, preConsumedQuota)
-	if err != nil {
-		return openai.ErrorWrapper(err, "decrease_user_quota_failed", http.StatusInternalServerError)
-	}
-	if userQuota > 100*preConsumedQuota {
-		// in this case, we do not pre-consume quota
-		// because the user has enough quota
-		preConsumedQuota = 0
-	}
-	if preConsumedQuota > 0 {
-		err := model.PreConsumeTokenQuota(tokenId, preConsumedQuota)
-		if err != nil {
-			return openai.ErrorWrapper(err, "pre_consume_token_quota_failed", http.StatusForbidden)
-		}
-	}
-	succeed := false
+	settle := false
 	defer func() {
-		if succeed {
+		settlementContext := context.WithoutCancel(ctx)
+		if !settle {
+			reservation.Refund(settlementContext)
 			return
 		}
-		if preConsumedQuota > 0 {
-			// we need to roll back the pre-consumed quota
-			defer func(ctx context.Context) {
-				go func() {
-					// negative means add quota back for token & user
-					err := model.PostConsumeTokenQuota(tokenId, -preConsumedQuota)
-					if err != nil {
-						logger.Error(ctx, fmt.Sprintf("error rollback pre-consumed quota: %s", err.Error()))
-					}
-				}()
-			}(c.Request.Context())
+		if ctx.Err() != nil {
+			quota = max(quota, reservation.Reserved)
+		}
+		charged := reservation.Settle(settlementContext, quota)
+		if charged != 0 {
+			model.RecordConsumeLog(settlementContext, &model.Log{
+				UserId: userId, ChannelId: channelId, PromptTokens: int(charged),
+				ModelName: audioModel, TokenName: tokenName, Quota: int(charged),
+				Content: fmt.Sprintf("倍率：%.2f × %.2f", modelRatio, groupRatio),
+			})
+			model.UpdateUserUsedQuotaAndRequestCount(userId, charged)
+			model.UpdateChannelUsedQuota(channelId, charged)
 		}
 	}()
 
@@ -141,7 +123,7 @@ func RelayAudioHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 	c.Request.Body = io.NopCloser(bytes.NewBuffer(requestBody.Bytes()))
 	responseFormat := c.DefaultPostForm("response_format", "json")
 
-	req, err := http.NewRequest(c.Request.Method, fullRequestURL, requestBody)
+	req, err := http.NewRequestWithContext(ctx, c.Request.Method, fullRequestURL, requestBody)
 	if err != nil {
 		return openai.ErrorWrapper(err, "new_request_failed", http.StatusInternalServerError)
 	}
@@ -161,6 +143,9 @@ func RelayAudioHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 	resp, err := client.HTTPClient.Do(req)
 	if err != nil {
 		return openai.ErrorWrapper(err, "do_request_failed", http.StatusInternalServerError)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return RelayErrorHandler(resp)
 	}
 
 	err = req.Body.Close()
@@ -213,11 +198,7 @@ func RelayAudioHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 	if resp.StatusCode != http.StatusOK {
 		return RelayErrorHandler(resp)
 	}
-	succeed = true
-	quotaDelta := quota - preConsumedQuota
-	defer func(ctx context.Context) {
-		go billing.PostConsumeQuota(ctx, tokenId, quotaDelta, quota, userId, channelId, modelRatio, groupRatio, audioModel, tokenName)
-	}(c.Request.Context())
+	settle = true
 
 	for k, v := range resp.Header {
 		c.Writer.Header().Set(k, v[0])

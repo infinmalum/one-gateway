@@ -9,13 +9,13 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/pkg/errors"
 	"github.com/infinmalum/one-gateway/common/logger"
 	"github.com/infinmalum/one-gateway/relay/adaptor"
 	"github.com/infinmalum/one-gateway/relay/adaptor/openai"
 	"github.com/infinmalum/one-gateway/relay/meta"
 	"github.com/infinmalum/one-gateway/relay/model"
 	"github.com/infinmalum/one-gateway/relay/relaymode"
+	"github.com/pkg/errors"
 )
 
 type Adaptor struct {
@@ -39,7 +39,8 @@ func (*Adaptor) ConvertImageRequest(request *model.ImageRequest) (any, error) {
 	}, nil
 }
 
-func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.GeneralOpenAIRequest) (any, error) {
+func (a *Adaptor) ConvertRequest(in *model.ConversionInput) (any, error) {
+	request := in.Request
 	if !request.Stream {
 		// TODO: support non-stream mode
 		return nil, errors.Errorf("replicate models only support stream mode now, please set stream=true")

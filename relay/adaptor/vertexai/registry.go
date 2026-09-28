@@ -33,7 +33,7 @@ func init() {
 }
 
 type innerAIAdapter interface {
-	ConvertRequest(c *gin.Context, relayMode int, request *model.GeneralOpenAIRequest) (any, error)
+	ConvertRequest(input *model.ConversionInput) (any, error)
 	DoResponse(c *gin.Context, resp *http.Response, meta *meta.Meta) (usage *model.Usage, err *model.ErrorWithStatusCode)
 }
 

@@ -45,11 +45,13 @@ func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Request, meta *me
 	return nil
 }
 
-func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.GeneralOpenAIRequest) (any, error) {
+func (a *Adaptor) ConvertRequest(in *model.ConversionInput) (any, error) {
+	request := in.Request
+	relayMode := in.Mode
 	if request == nil {
 		return nil, errors.New("request is nil")
 	}
-	apiKey := c.Request.Header.Get("Authorization")
+	apiKey := in.APIKey
 	apiKey = strings.TrimPrefix(apiKey, "Bearer ")
 	_, secretId, secretKey, err := ParseConfig(apiKey)
 	if err != nil {

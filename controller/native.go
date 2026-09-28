@@ -11,8 +11,8 @@ import (
 	"github.com/infinmalum/one-gateway/common"
 	"github.com/infinmalum/one-gateway/common/config"
 	"github.com/infinmalum/one-gateway/common/ctxkey"
+	"github.com/infinmalum/one-gateway/relay/ginmeta"
 	"github.com/infinmalum/one-gateway/relay/lifecycle"
-	"github.com/infinmalum/one-gateway/relay/meta"
 	"github.com/infinmalum/one-gateway/relay/native"
 )
 
@@ -227,7 +227,7 @@ func NativeGemini(c *gin.Context) {
 }
 
 func forwardNative(c *gin.Context, input nativeInput) {
-	metadata := meta.GetByContext(c)
+	metadata := ginmeta.Get(c)
 	version := ""
 	if input.protocol == native.Gemini {
 		version = strings.SplitN(strings.TrimPrefix(c.Request.URL.Path, "/"), "/", 2)[0]
