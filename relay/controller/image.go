@@ -12,13 +12,14 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/infinmalum/one-gateway/common"
-	"github.com/infinmalum/one-gateway/common/ctxkey"
 	"github.com/infinmalum/one-gateway/common/logger"
 	"github.com/infinmalum/one-gateway/model"
 	"github.com/infinmalum/one-gateway/relay"
 	"github.com/infinmalum/one-gateway/relay/adaptor/openai"
+	"github.com/infinmalum/one-gateway/relay/billing"
 	billingratio "github.com/infinmalum/one-gateway/relay/billing/ratio"
 	"github.com/infinmalum/one-gateway/relay/channeltype"
+	"github.com/infinmalum/one-gateway/relay/ginmeta"
 	"github.com/infinmalum/one-gateway/relay/meta"
 	relaymodel "github.com/infinmalum/one-gateway/relay/model"
 )
@@ -105,7 +106,7 @@ func getImageCostRatio(imageRequest *relaymodel.ImageRequest) (float64, error) {
 
 func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatusCode {
 	ctx := c.Request.Context()
-	meta := meta.GetByContext(c)
+	meta := ginmeta.Get(c)
 	imageRequest, err := getImageRequest(c, meta.Mode)
 	if err != nil {
 		logger.Errorf(ctx, "getImageRequest failed: %s", err.Error())
@@ -171,8 +172,6 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 	modelRatio := billingratio.GetModelRatio(imageModel, meta.ChannelType)
 	groupRatio := billingratio.GetGroupRatio(meta.Group)
 	ratio := modelRatio * groupRatio
-	userQuota, err := model.CacheGetUserQuota(ctx, meta.UserId)
-
 	var quota int64
 	switch meta.ChannelType {
 	case channeltype.Replicate:
@@ -182,9 +181,29 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 		quota = int64(ratio*imageCostRatio*1000) * int64(imageRequest.N)
 	}
 
-	if userQuota-quota < 0 {
-		return openai.ErrorWrapper(errors.New("user quota is not enough"), "insufficient_user_quota", http.StatusForbidden)
+	reservation, err := billing.Reserve(ctx, meta.UserId, meta.TokenId, quota)
+	if err != nil {
+		return openai.ErrorWrapper(err, "reserve_quota_failed", http.StatusForbidden)
 	}
+	settle := false
+	defer func() {
+		settlementContext := context.WithoutCancel(ctx)
+		if !settle {
+			reservation.Refund(settlementContext)
+			return
+		}
+		charged := reservation.Settle(settlementContext, quota)
+		if charged == 0 {
+			return
+		}
+		model.RecordConsumeLog(settlementContext, &model.Log{
+			UserId: meta.UserId, ChannelId: meta.ChannelId,
+			ModelName: imageRequest.Model, TokenName: meta.TokenName,
+			Quota: int(charged), Content: fmt.Sprintf("倍率：%.2f × %.2f", modelRatio, groupRatio),
+		})
+		model.UpdateUserUsedQuotaAndRequestCount(meta.UserId, charged)
+		model.UpdateChannelUsedQuota(meta.ChannelId, charged)
+	}()
 
 	// do request
 	resp, err := adaptor.DoRequest(c, meta, requestBody)
@@ -192,47 +211,18 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 		logger.Errorf(ctx, "DoRequest failed: %s", err.Error())
 		return openai.ErrorWrapper(err, "do_request_failed", http.StatusInternalServerError)
 	}
-
-	defer func(ctx context.Context) {
-		if resp != nil &&
-			resp.StatusCode != http.StatusCreated && // replicate returns 201
-			resp.StatusCode != http.StatusOK {
-			return
-		}
-
-		err := model.PostConsumeTokenQuota(meta.TokenId, quota)
-		if err != nil {
-			logger.SysError("error consuming token remain quota: " + err.Error())
-		}
-		err = model.CacheUpdateUserQuota(ctx, meta.UserId)
-		if err != nil {
-			logger.SysError("error update user quota cache: " + err.Error())
-		}
-		if quota != 0 {
-			tokenName := c.GetString(ctxkey.TokenName)
-			logContent := fmt.Sprintf("倍率：%.2f × %.2f", modelRatio, groupRatio)
-			model.RecordConsumeLog(ctx, &model.Log{
-				UserId:           meta.UserId,
-				ChannelId:        meta.ChannelId,
-				PromptTokens:     0,
-				CompletionTokens: 0,
-				ModelName:        imageRequest.Model,
-				TokenName:        tokenName,
-				Quota:            int(quota),
-				Content:          logContent,
-			})
-			model.UpdateUserUsedQuotaAndRequestCount(meta.UserId, quota)
-			channelId := c.GetInt(ctxkey.ChannelId)
-			model.UpdateChannelUsedQuota(channelId, quota)
-		}
-	}(c.Request.Context())
+	if resp == nil || resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		return RelayErrorHandler(resp)
+	}
 
 	// do response
 	_, respErr := adaptor.DoResponse(c, resp, meta)
 	if respErr != nil {
 		logger.Errorf(ctx, "respErr is not nil: %+v", respErr)
+		settle = (resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusCreated) && c.Writer.Written()
 		return respErr
 	}
+	settle = resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusCreated
 
 	return nil
 }

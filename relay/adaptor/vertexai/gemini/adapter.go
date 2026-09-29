@@ -4,11 +4,11 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/pkg/errors"
 	"github.com/infinmalum/one-gateway/common/ctxkey"
 	"github.com/infinmalum/one-gateway/relay/adaptor/gemini"
 	"github.com/infinmalum/one-gateway/relay/adaptor/openai"
 	"github.com/infinmalum/one-gateway/relay/relaymode"
+	"github.com/pkg/errors"
 
 	"github.com/infinmalum/one-gateway/relay/meta"
 	"github.com/infinmalum/one-gateway/relay/model"
@@ -27,14 +27,15 @@ var ModelList = []string{
 type Adaptor struct {
 }
 
-func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.GeneralOpenAIRequest) (any, error) {
+func (a *Adaptor) ConvertRequest(in *model.ConversionInput) (any, error) {
+	request := in.Request
 	if request == nil {
 		return nil, errors.New("request is nil")
 	}
 
 	geminiRequest := gemini.ConvertRequest(*request)
-	c.Set(ctxkey.RequestModel, request.Model)
-	c.Set(ctxkey.ConvertedRequest, geminiRequest)
+	in.Set(ctxkey.RequestModel, request.Model)
+	in.Set(ctxkey.ConvertedRequest, geminiRequest)
 	return geminiRequest, nil
 }
 

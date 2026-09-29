@@ -29,7 +29,7 @@ import (
 	"github.com/infinmalum/one-gateway/relay/adaptor/openai"
 	"github.com/infinmalum/one-gateway/relay/channeltype"
 	"github.com/infinmalum/one-gateway/relay/controller"
-	"github.com/infinmalum/one-gateway/relay/meta"
+	"github.com/infinmalum/one-gateway/relay/ginmeta"
 	relaymodel "github.com/infinmalum/one-gateway/relay/model"
 	"github.com/infinmalum/one-gateway/relay/relaymode"
 )
@@ -82,7 +82,7 @@ func testChannel(ctx context.Context, channel *model.Channel, request *relaymode
 	cfg, _ := channel.LoadConfig()
 	c.Set(ctxkey.Config, cfg)
 	middleware.SetupContextForSelectedChannel(c, channel, "")
-	meta := meta.GetByContext(c)
+	meta := ginmeta.Get(c)
 	apiType := channeltype.ToAPIType(channel.Type)
 	adaptor := relay.GetAdaptor(apiType)
 	if adaptor == nil {
@@ -102,9 +102,13 @@ func testChannel(ctx context.Context, channel *model.Channel, request *relaymode
 	}
 	meta.OriginModelName, meta.ActualModelName = request.Model, modelName
 	request.Model = modelName
-	convertedRequest, err := adaptor.ConvertRequest(c, relaymode.ChatCompletions, request)
+	conversion := &relaymodel.ConversionInput{Mode: relaymode.ChatCompletions, Request: request, APIKey: channel.Key}
+	convertedRequest, err := adaptor.ConvertRequest(conversion)
 	if err != nil {
 		return "", err, nil
+	}
+	for key, value := range conversion.Values {
+		c.Set(key, value)
 	}
 	jsonData, err := json.Marshal(convertedRequest)
 	if err != nil {

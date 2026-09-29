@@ -20,6 +20,12 @@ func GetRandomSatisfiedChannelByType(group, model string, channelType int, ignor
 	return GetRandomSatisfiedChannelByTypeExcluding(group, model, channelType, ignoreFirstPriority, nil)
 }
 
+// GetRandomSatisfiedChannelExcluding serves protocol-neutral retries for
+// legacy routes, whose provider type is selected from all compatible channels.
+func GetRandomSatisfiedChannelExcluding(group, model string, ignoreFirstPriority bool, excluded map[int]bool) (*Channel, error) {
+	return GetRandomSatisfiedChannelByTypeExcluding(group, model, -1, ignoreFirstPriority, excluded)
+}
+
 // GetRandomSatisfiedChannelByTypeExcluding chooses a compatible channel that
 // has not already failed during the current native request.
 func GetRandomSatisfiedChannelByTypeExcluding(group, model string, channelType int, ignoreFirstPriority bool, excluded map[int]bool) (*Channel, error) {
@@ -39,7 +45,11 @@ func GetRandomSatisfiedChannelByTypeExcluding(group, model string, channelType i
 		ids = append(ids, ability.ChannelId)
 	}
 	var channels []Channel
-	if err := DB.Where("id IN ? AND type = ? AND status = ?", ids, channelType, ChannelStatusEnabled).Find(&channels).Error; err != nil {
+	query := DB.Where("id IN ? AND status = ?", ids, ChannelStatusEnabled)
+	if channelType >= 0 {
+		query = query.Where("type = ?", channelType)
+	}
+	if err := query.Find(&channels).Error; err != nil {
 		return nil, err
 	}
 	available := channels[:0]

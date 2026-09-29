@@ -19,16 +19,16 @@ import (
 	"github.com/infinmalum/one-gateway/relay/adaptor"
 	"github.com/infinmalum/one-gateway/relay/adaptor/openai"
 	"github.com/infinmalum/one-gateway/relay/apitype"
-	"github.com/infinmalum/one-gateway/relay/billing"
 	billingratio "github.com/infinmalum/one-gateway/relay/billing/ratio"
 	"github.com/infinmalum/one-gateway/relay/channeltype"
+	"github.com/infinmalum/one-gateway/relay/ginmeta"
 	"github.com/infinmalum/one-gateway/relay/meta"
 	"github.com/infinmalum/one-gateway/relay/model"
 )
 
 func RelayTextHelper(c *gin.Context) *model.ErrorWithStatusCode {
 	ctx := c.Request.Context()
-	meta := meta.GetByContext(c)
+	meta := ginmeta.Get(c)
 	// get & validate textRequest
 	textRequest, err := getAndValidateTextRequest(c, meta.Mode)
 	if err != nil {
@@ -50,7 +50,7 @@ func RelayTextHelper(c *gin.Context) *model.ErrorWithStatusCode {
 	// pre-consume quota
 	promptTokens := getPromptTokens(textRequest, meta.Mode)
 	meta.PromptTokens = promptTokens
-	preConsumedQuota, bizErr := preConsumeQuota(ctx, textRequest, promptTokens, ratio, meta)
+	reservation, bizErr := preConsumeQuota(ctx, textRequest, promptTokens, ratio, meta)
 	if bizErr != nil {
 		logger.Warnf(ctx, "preConsumeQuota failed: %+v", *bizErr)
 		return bizErr
@@ -58,7 +58,7 @@ func RelayTextHelper(c *gin.Context) *model.ErrorWithStatusCode {
 
 	adaptor := relay.GetAdaptor(meta.APIType)
 	if adaptor == nil {
-		billing.ReturnPreConsumedQuota(ctx, preConsumedQuota, meta.TokenId, meta.UserId)
+		reservation.Refund(context.WithoutCancel(ctx))
 		return openai.ErrorWrapper(fmt.Errorf("invalid api type: %d", meta.APIType), "invalid_api_type", http.StatusBadRequest)
 	}
 	adaptor.Init(meta)
@@ -66,7 +66,7 @@ func RelayTextHelper(c *gin.Context) *model.ErrorWithStatusCode {
 	// get request body
 	requestBody, err := getRequestBody(c, meta, textRequest, adaptor)
 	if err != nil {
-		billing.ReturnPreConsumedQuota(ctx, preConsumedQuota, meta.TokenId, meta.UserId)
+		reservation.Refund(context.WithoutCancel(ctx))
 		return openai.ErrorWrapper(err, "convert_request_failed", http.StatusInternalServerError)
 	}
 
@@ -74,11 +74,11 @@ func RelayTextHelper(c *gin.Context) *model.ErrorWithStatusCode {
 	resp, err := adaptor.DoRequest(c, meta, requestBody)
 	if err != nil {
 		logger.Errorf(ctx, "DoRequest failed: %s", err.Error())
-		billing.ReturnPreConsumedQuota(ctx, preConsumedQuota, meta.TokenId, meta.UserId)
+		reservation.Refund(context.WithoutCancel(ctx))
 		return openai.ErrorWrapper(err, "do_request_failed", http.StatusInternalServerError)
 	}
 	if isErrorHappened(meta, resp) {
-		billing.ReturnPreConsumedQuota(ctx, preConsumedQuota, meta.TokenId, meta.UserId)
+		reservation.Refund(context.WithoutCancel(ctx))
 		return RelayErrorHandler(resp)
 	}
 
@@ -86,11 +86,15 @@ func RelayTextHelper(c *gin.Context) *model.ErrorWithStatusCode {
 	usage, respErr := adaptor.DoResponse(c, resp, meta)
 	if respErr != nil {
 		logger.Errorf(ctx, "respErr is not nil: %+v", respErr)
-		billing.ReturnPreConsumedQuota(ctx, preConsumedQuota, meta.TokenId, meta.UserId)
+		if c.Writer.Written() {
+			postConsumeQuota(context.WithoutCancel(ctx), usage, meta, textRequest, ratio, reservation, modelRatio, groupRatio, systemPromptReset, true)
+		} else {
+			reservation.Refund(context.WithoutCancel(ctx))
+		}
 		return respErr
 	}
 	// post-consume quota
-	postConsumeQuota(context.WithoutCancel(ctx), usage, meta, textRequest, ratio, preConsumedQuota, modelRatio, groupRatio, systemPromptReset)
+	postConsumeQuota(context.WithoutCancel(ctx), usage, meta, textRequest, ratio, reservation, modelRatio, groupRatio, systemPromptReset, ctx.Err() != nil)
 	return nil
 }
 
@@ -106,10 +110,14 @@ func getRequestBody(c *gin.Context, meta *meta.Meta, textRequest *model.GeneralO
 
 	// get request body
 	var requestBody io.Reader
-	convertedRequest, err := adaptor.ConvertRequest(c, meta.Mode, textRequest)
+	conversion := &model.ConversionInput{Mode: meta.Mode, Request: textRequest, APIKey: meta.APIKey}
+	convertedRequest, err := adaptor.ConvertRequest(conversion)
 	if err != nil {
 		logger.Debugf(c.Request.Context(), "converted request failed: %s\n", err.Error())
 		return nil, err
+	}
+	for key, value := range conversion.Values {
+		c.Set(key, value)
 	}
 	jsonData, err := json.Marshal(convertedRequest)
 	if err != nil {

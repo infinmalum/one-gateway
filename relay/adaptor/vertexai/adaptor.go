@@ -24,7 +24,8 @@ type Adaptor struct{}
 func (a *Adaptor) Init(meta *meta.Meta) {
 }
 
-func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.GeneralOpenAIRequest) (any, error) {
+func (a *Adaptor) ConvertRequest(in *model.ConversionInput) (any, error) {
+	request := in.Request
 	if request == nil {
 		return nil, errors.New("request is nil")
 	}
@@ -34,7 +35,7 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 		return nil, errors.New("adaptor not found")
 	}
 
-	return adaptor.ConvertRequest(c, relayMode, request)
+	return adaptor.ConvertRequest(in)
 }
 
 func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Meta) (usage *model.Usage, err *model.ErrorWithStatusCode) {

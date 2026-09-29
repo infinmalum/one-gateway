@@ -115,6 +115,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 
 	common.SetEventStreamHeaders(c)
 	var modelName string
+	complete := false
 
 	for scanner.Scan() {
 		data := scanner.Text()
@@ -130,6 +131,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 			logger.SysError("error unmarshalling stream response: " + err.Error())
 			continue
 		}
+		complete = complete || cozeResponse.IsFinish
 
 		response, _ := StreamResponseCoze2OpenAI(&cozeResponse)
 		if response == nil {
@@ -149,7 +151,12 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 	}
 
 	if err := scanner.Err(); err != nil {
-		logger.SysError("error reading stream: " + err.Error())
+		_ = resp.Body.Close()
+		return openai.ErrorWrapper(err, "stream_read_failed", http.StatusBadGateway), &responseText
+	}
+	if !complete {
+		_ = resp.Body.Close()
+		return openai.ErrorWrapper(io.ErrUnexpectedEOF, "stream_incomplete", http.StatusBadGateway), &responseText
 	}
 
 	render.Done(c)

@@ -28,3 +28,23 @@ func TestErrorBodyUsesClientProtocol(t *testing.T) {
 		}
 	}
 }
+
+func TestConvertedErrorKeepsUpstreamDetailsInsideClientEnvelope(t *testing.T) {
+	for _, fixture := range []struct {
+		protocol Protocol
+		want     []string
+	}{
+		{OpenAIChat, []string{`"rate_limit_error"`, `"code":"overloaded"`, `"param":"model"`, `"upstream_type":"api_error"`}},
+		{Anthropic, []string{`"type":"error"`, `"rate_limit_error"`, `"upstream_error"`, `"code":"overloaded"`, `"param":"model"`}},
+	} {
+		body, err := json.Marshal(ErrorBodyWithUpstream(fixture.protocol, http.StatusTooManyRequests, "busy", "api_error", "overloaded", "model"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, want := range fixture.want {
+			if !strings.Contains(string(body), want) {
+				t.Fatalf("%s error lost %s: %s", fixture.protocol, want, body)
+			}
+		}
+	}
+}

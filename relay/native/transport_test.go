@@ -11,7 +11,43 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+
+	"github.com/infinmalum/one-gateway/relay/channeltype"
 )
+
+func TestNativeChatChannelProfiles(t *testing.T) {
+	for _, fixture := range []struct {
+		kind    int
+		baseURL string
+		version string
+		path    string
+		query   string
+		header  string
+	}{
+		{channeltype.OpenAI, "https://example.com", "", "/v1/chat/completions", "", "Authorization"},
+		{channeltype.OpenAICompatible, "https://example.com/openai", "", "/openai/chat/completions", "", "Authorization"},
+		{channeltype.GeminiOpenAICompatible, "https://example.com/v1beta/openai", "", "/v1beta/openai/chat/completions", "", "Authorization"},
+		{channeltype.Azure, "https://example.com", "2026-01-01", "/openai/deployments/upstream/chat/completions", "2026-01-01", "api-key"},
+		{channeltype.Minimax, "https://example.com", "", "/v1/text/chatcompletion_v2", "", "Authorization"},
+		{channeltype.Doubao, "https://example.com", "", "/api/v3/chat/completions", "", "Authorization"},
+		{channeltype.Novita, "https://example.com/v3/openai", "", "/v3/openai/chat/completions", "", "Authorization"},
+		{channeltype.BaiduV2, "https://example.com", "", "/v2/chat/completions", "", "Authorization"},
+		{channeltype.AliBailian, "https://example.com", "", "/compatible-mode/v1/chat/completions", "", "Authorization"},
+	} {
+		request, err := BuildRequest(context.Background(), Request{Protocol: OpenAIChat, ChannelType: fixture.kind,
+			BaseURL: fixture.baseURL, Version: fixture.version, Model: "upstream", APIKey: "provider-key",
+			Body: []byte(`{"model":"upstream","messages":[{"role":"user","content":"hi"}]}`)})
+		if err != nil {
+			t.Fatalf("channel %d: %v", fixture.kind, err)
+		}
+		if request.URL.Path != fixture.path || request.URL.Query().Get("api-version") != fixture.query || request.Header.Get(fixture.header) == "" {
+			t.Fatalf("channel %d produced %s and headers %v", fixture.kind, request.URL, request.Header)
+		}
+		if fixture.kind == channeltype.Azure && request.Header.Get("Authorization") != "" {
+			t.Fatal("Azure request forwarded a bearer credential")
+		}
+	}
+}
 
 func TestAnthropicRequestPreservesExtensionsAndReplacesCredential(t *testing.T) {
 	original := []byte(`{"model":"client-model","max_tokens":20,"stream":true,"thinking":{"type":"enabled","budget_tokens":100},"future_field":{"nested":true}}`)

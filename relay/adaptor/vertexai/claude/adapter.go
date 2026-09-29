@@ -4,9 +4,9 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/pkg/errors"
 	"github.com/infinmalum/one-gateway/common/ctxkey"
 	"github.com/infinmalum/one-gateway/relay/adaptor/anthropic"
+	"github.com/pkg/errors"
 
 	"github.com/infinmalum/one-gateway/relay/meta"
 	"github.com/infinmalum/one-gateway/relay/model"
@@ -26,7 +26,8 @@ const anthropicVersion = "vertex-2023-10-16"
 type Adaptor struct {
 }
 
-func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.GeneralOpenAIRequest) (any, error) {
+func (a *Adaptor) ConvertRequest(in *model.ConversionInput) (any, error) {
+	request := in.Request
 	if request == nil {
 		return nil, errors.New("request is nil")
 	}
@@ -45,8 +46,8 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 		Tools:       claudeReq.Tools,
 	}
 
-	c.Set(ctxkey.RequestModel, request.Model)
-	c.Set(ctxkey.ConvertedRequest, req)
+	in.Set(ctxkey.RequestModel, request.Model)
+	in.Set(ctxkey.ConvertedRequest, req)
 	return req, nil
 }
 

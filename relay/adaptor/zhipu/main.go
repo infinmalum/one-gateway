@@ -159,6 +159,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 	})
 
 	common.SetEventStreamHeaders(c)
+	complete := false
 
 	for scanner.Scan() {
 		data := scanner.Text()
@@ -178,6 +179,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 					logger.SysError("error marshalling stream response: " + err.Error())
 				}
 			} else if strings.HasPrefix(line, "meta:") {
+				complete = true
 				metaSegment := line[5:]
 				var zhipuResponse StreamMetaResponse
 				err := json.Unmarshal([]byte(metaSegment), &zhipuResponse)
@@ -196,7 +198,12 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 	}
 
 	if err := scanner.Err(); err != nil {
-		logger.SysError("error reading stream: " + err.Error())
+		_ = resp.Body.Close()
+		return openai.ErrorWrapper(err, "stream_read_failed", http.StatusBadGateway), usage
+	}
+	if !complete {
+		_ = resp.Body.Close()
+		return openai.ErrorWrapper(io.ErrUnexpectedEOF, "stream_incomplete", http.StatusBadGateway), usage
 	}
 
 	render.Done(c)

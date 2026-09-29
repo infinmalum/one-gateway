@@ -9,14 +9,14 @@ import (
 	"github.com/infinmalum/one-gateway/common/logger"
 	"github.com/infinmalum/one-gateway/relay"
 	"github.com/infinmalum/one-gateway/relay/adaptor/openai"
-	"github.com/infinmalum/one-gateway/relay/meta"
+	"github.com/infinmalum/one-gateway/relay/ginmeta"
 	relaymodel "github.com/infinmalum/one-gateway/relay/model"
 )
 
 // RelayProxyHelper is a helper function to proxy the request to the upstream service
 func RelayProxyHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatusCode {
 	ctx := c.Request.Context()
-	meta := meta.GetByContext(c)
+	meta := ginmeta.Get(c)
 
 	adaptor := relay.GetAdaptor(meta.APIType)
 	if adaptor == nil {

@@ -12,8 +12,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime/types"
 	"github.com/gin-gonic/gin"
-	"github.com/jinzhu/copier"
-	"github.com/pkg/errors"
 	"github.com/infinmalum/one-gateway/common"
 	"github.com/infinmalum/one-gateway/common/ctxkey"
 	"github.com/infinmalum/one-gateway/common/helper"
@@ -22,6 +20,8 @@ import (
 	"github.com/infinmalum/one-gateway/relay/adaptor/aws/utils"
 	"github.com/infinmalum/one-gateway/relay/adaptor/openai"
 	relaymodel "github.com/infinmalum/one-gateway/relay/model"
+	"github.com/jinzhu/copier"
+	"github.com/pkg/errors"
 )
 
 // https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html
@@ -140,11 +140,14 @@ func StreamHandler(c *gin.Context, awsCli *bedrockruntime.Client) (*relaymodel.E
 	var usage relaymodel.Usage
 	var id string
 	var lastToolCallChoice openai.ChatCompletionsStreamResponseChoice
+	complete := false
 
 	c.Stream(func(w io.Writer) bool {
 		event, ok := <-stream.Events()
 		if !ok {
-			c.Render(-1, common.CustomEvent{Data: "data: [DONE]"})
+			if complete {
+				c.Render(-1, common.CustomEvent{Data: "data: [DONE]"})
+			}
 			return false
 		}
 
@@ -156,6 +159,7 @@ func StreamHandler(c *gin.Context, awsCli *bedrockruntime.Client) (*relaymodel.E
 				logger.SysError("error unmarshalling stream response: " + err.Error())
 				return false
 			}
+			complete = complete || claudeResp.Type == "message_stop"
 
 			response, meta := anthropic.StreamResponseClaude2OpenAI(claudeResp)
 			if meta != nil {
@@ -202,6 +206,9 @@ func StreamHandler(c *gin.Context, awsCli *bedrockruntime.Client) (*relaymodel.E
 			return false
 		}
 	})
+	if !complete {
+		return utils.WrapErr(errors.New("AWS Claude stream ended before message_stop")), &usage
+	}
 
 	return nil, &usage
 }

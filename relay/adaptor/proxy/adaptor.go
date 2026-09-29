@@ -7,12 +7,12 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/pkg/errors"
 	"github.com/infinmalum/one-gateway/relay/adaptor"
 	channelhelper "github.com/infinmalum/one-gateway/relay/adaptor"
 	"github.com/infinmalum/one-gateway/relay/meta"
 	"github.com/infinmalum/one-gateway/relay/model"
 	relaymodel "github.com/infinmalum/one-gateway/relay/model"
+	"github.com/pkg/errors"
 )
 
 var _ adaptor.Adaptor = new(Adaptor)
@@ -24,7 +24,7 @@ type Adaptor struct{}
 func (a *Adaptor) Init(meta *meta.Meta) {
 }
 
-func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.GeneralOpenAIRequest) (any, error) {
+func (a *Adaptor) ConvertRequest(in *model.ConversionInput) (any, error) {
 	return nil, errors.New("notimplement")
 }
 

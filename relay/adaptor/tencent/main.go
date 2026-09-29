@@ -154,6 +154,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 	scanner.Split(bufio.ScanLines)
 
 	common.SetEventStreamHeaders(c)
+	complete := false
 
 	for scanner.Scan() {
 		data := scanner.Text()
@@ -168,6 +169,9 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 			logger.SysError("error unmarshalling stream response: " + err.Error())
 			continue
 		}
+		for _, choice := range tencentResponse.Choices {
+			complete = complete || choice.FinishReason != ""
+		}
 
 		response := streamResponseTencent2OpenAI(&tencentResponse)
 		if len(response.Choices) != 0 {
@@ -181,7 +185,12 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 	}
 
 	if err := scanner.Err(); err != nil {
-		logger.SysError("error reading stream: " + err.Error())
+		_ = resp.Body.Close()
+		return openai.ErrorWrapper(err, "stream_read_failed", http.StatusBadGateway), responseText
+	}
+	if !complete {
+		_ = resp.Body.Close()
+		return openai.ErrorWrapper(io.ErrUnexpectedEOF, "stream_incomplete", http.StatusBadGateway), responseText
 	}
 
 	render.Done(c)

@@ -36,6 +36,7 @@ func StreamHandler(c *gin.Context, resp *http.Response, promptTokens int, modelN
 	id := helper.GetResponseID(c)
 	responseModel := c.GetString(ctxkey.OriginalModel)
 	var responseText string
+	complete := false
 
 	for scanner.Scan() {
 		data := scanner.Text()
@@ -46,6 +47,7 @@ func StreamHandler(c *gin.Context, resp *http.Response, promptTokens int, modelN
 		data = strings.TrimSuffix(data, "\r")
 
 		if data == "[DONE]" {
+			complete = true
 			break
 		}
 
@@ -68,7 +70,12 @@ func StreamHandler(c *gin.Context, resp *http.Response, promptTokens int, modelN
 	}
 
 	if err := scanner.Err(); err != nil {
-		logger.SysError("error reading stream: " + err.Error())
+		_ = resp.Body.Close()
+		return openai.ErrorWrapper(err, "stream_read_failed", http.StatusBadGateway), nil
+	}
+	if !complete {
+		_ = resp.Body.Close()
+		return openai.ErrorWrapper(io.ErrUnexpectedEOF, "stream_incomplete", http.StatusBadGateway), nil
 	}
 
 	render.Done(c)
