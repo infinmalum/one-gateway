@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/infinmalum/one-gateway/relay/channeltype"
 )
 
 type Protocol string
@@ -25,6 +27,7 @@ const (
 
 type Request struct {
 	Protocol     Protocol
+	ChannelType  int
 	BaseURL      string
 	Version      string
 	Model        string
@@ -111,7 +114,34 @@ func BuildRequest(ctx context.Context, input Request) (*http.Request, error) {
 	default:
 		return nil, errors.New("unsupported native protocol")
 	}
+	if input.Protocol == OpenAIChat {
+		switch input.ChannelType {
+		case channeltype.OpenAICompatible, channeltype.GeminiOpenAICompatible, channeltype.Novita:
+			path = strings.TrimPrefix(path, "/v1")
+		case channeltype.Azure:
+			if input.Model == "" || strings.ContainsAny(input.Model, "/?#") || input.Version == "" {
+				return nil, errors.New("Azure Chat requires a mapped deployment and API version")
+			}
+			path = "/openai/deployments/" + url.PathEscape(strings.ReplaceAll(input.Model, ".", "")) + "/chat/completions"
+		case channeltype.Minimax:
+			path = "/v1/text/chatcompletion_v2"
+		case channeltype.Doubao:
+			path = "/api/v3/chat/completions"
+		case channeltype.BaiduV2:
+			path = "/v2/chat/completions"
+		case channeltype.AliBailian:
+			path = "/compatible-mode/v1/chat/completions"
+		}
+	}
 	endpoint := strings.TrimRight(base.String(), "/") + path
+	if input.Protocol == OpenAIChat && strings.HasPrefix(base.Host, "gateway.ai.cloudflare.com") {
+		switch input.ChannelType {
+		case channeltype.OpenAI:
+			endpoint = strings.TrimRight(base.String(), "/") + strings.TrimPrefix(path, "/v1")
+		case channeltype.Azure:
+			endpoint = strings.TrimRight(base.String(), "/") + strings.TrimPrefix(path, "/openai/deployments")
+		}
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
@@ -125,6 +155,9 @@ func BuildRequest(ctx context.Context, input Request) (*http.Request, error) {
 	}
 	if stream && input.Protocol == Gemini {
 		query.Set("alt", "sse")
+	}
+	if input.Protocol == OpenAIChat && input.ChannelType == channeltype.Azure {
+		query.Set("api-version", input.Version)
 	}
 	req.URL.RawQuery = query.Encode()
 	req.Header.Set("Content-Type", "application/json")
@@ -147,9 +180,17 @@ func BuildRequest(ctx context.Context, input Request) (*http.Request, error) {
 	case Gemini:
 		req.Header.Set("x-goog-api-key", input.APIKey)
 	case OpenAIResponses, OpenAIChat, OpenAICompletions, OpenAIEmbeddings, OpenAIModerations:
-		req.Header.Set("Authorization", "Bearer "+input.APIKey)
+		if input.Protocol == OpenAIChat && input.ChannelType == channeltype.Azure {
+			req.Header.Set("api-key", input.APIKey)
+		} else {
+			req.Header.Set("Authorization", "Bearer "+input.APIKey)
+		}
 		if beta := input.Headers.Get("OpenAI-Beta"); beta != "" {
 			req.Header.Set("OpenAI-Beta", beta)
+		}
+		if input.Protocol == OpenAIChat && input.ChannelType == channeltype.OpenRouter {
+			req.Header.Set("HTTP-Referer", "https://github.com/infinmalum/one-gateway")
+			req.Header.Set("X-Title", "One Gateway")
 		}
 	}
 	return req, nil

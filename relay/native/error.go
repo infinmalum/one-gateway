@@ -52,3 +52,39 @@ func ErrorBody(protocol Protocol, status int, message string) any {
 	}
 	return map[string]any{"error": map[string]any{"code": status, "message": message, "status": statusName}}
 }
+
+// ErrorBodyWithUpstream keeps provider error details available to clients of a
+// converted route while presenting the inbound protocol's error envelope.
+// The top-level type always follows the client protocol and HTTP status.
+func ErrorBodyWithUpstream(protocol Protocol, status int, message, upstreamType string, code any, param string) any {
+	body := ErrorBody(protocol, status, message).(map[string]any)
+	detail := body["error"].(map[string]any)
+	if protocol == Anthropic {
+		if upstreamType != "" || code != nil || param != "" {
+			provider := map[string]any{}
+			if upstreamType != "" {
+				provider["type"] = upstreamType
+			}
+			if code != nil {
+				provider["code"] = code
+			}
+			if param != "" {
+				provider["param"] = param
+			}
+			detail["upstream_error"] = provider
+		}
+		return body
+	}
+	if protocol == OpenAIChat || protocol == OpenAIResponses || protocol == OpenAICompletions || protocol == OpenAIEmbeddings || protocol == OpenAIModerations {
+		if code != nil {
+			detail["code"] = code
+		}
+		if param != "" {
+			detail["param"] = param
+		}
+		if upstreamType != "" {
+			detail["upstream_type"] = upstreamType
+		}
+	}
+	return body
+}

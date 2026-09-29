@@ -107,6 +107,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 	})
 
 	common.SetEventStreamHeaders(c)
+	complete := false
 
 	for scanner.Scan() {
 		data := scanner.Text()
@@ -124,6 +125,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 		if len(AIProxyLibraryResponse.Documents) != 0 {
 			documents = AIProxyLibraryResponse.Documents
 		}
+		complete = complete || AIProxyLibraryResponse.Finish
 		response := streamResponseAIProxyLibrary2OpenAI(&AIProxyLibraryResponse)
 		err = render.ObjectData(c, response)
 		if err != nil {
@@ -132,7 +134,12 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 	}
 
 	if err := scanner.Err(); err != nil {
-		logger.SysError("error reading stream: " + err.Error())
+		_ = resp.Body.Close()
+		return openai.ErrorWrapper(err, "stream_read_failed", http.StatusBadGateway), &usage
+	}
+	if !complete {
+		_ = resp.Body.Close()
+		return openai.ErrorWrapper(io.ErrUnexpectedEOF, "stream_incomplete", http.StatusBadGateway), &usage
 	}
 
 	response := documentsAIProxyLibrary(documents)

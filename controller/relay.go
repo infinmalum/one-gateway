@@ -19,6 +19,7 @@ import (
 	"github.com/infinmalum/one-gateway/relay/controller"
 	"github.com/infinmalum/one-gateway/relay/lifecycle"
 	"github.com/infinmalum/one-gateway/relay/model"
+	"github.com/infinmalum/one-gateway/relay/native"
 	"github.com/infinmalum/one-gateway/relay/relaymode"
 )
 
@@ -46,7 +47,7 @@ func relayHelper(c *gin.Context, relayMode int) *model.ErrorWithStatusCode {
 func Relay(c *gin.Context) {
 	ctx := c.Request.Context()
 	relayMode := relaymode.GetByPath(c.Request.URL.Path)
-	if relayMode == relaymode.ChatCompletions && c.GetInt(ctxkey.Channel) == channeltype.OpenAI {
+	if relayMode == relaymode.ChatCompletions && channeltype.NativeChatCompatible(c.GetInt(ctxkey.Channel)) {
 		NativeOpenAIChat(c)
 		return
 	}
@@ -56,6 +57,18 @@ func Relay(c *gin.Context) {
 	}
 	if relayMode == relaymode.ChatCompletions && c.GetInt(ctxkey.Channel) == channeltype.Gemini {
 		NativeOpenAIChatViaGemini(c)
+		return
+	}
+	if relayMode == relaymode.ChatCompletions {
+		result := controller.RelayProviderChat(c)
+		if result != nil && !c.Writer.Written() {
+			if result.Upstream != nil {
+				c.JSON(result.Status, native.ErrorBodyWithUpstream(native.OpenAIChat, result.Status, result.Message,
+					result.Upstream.Type, result.Upstream.Code, result.Upstream.Param))
+			} else {
+				c.JSON(result.Status, native.ErrorBody(native.OpenAIChat, result.Status, result.Message))
+			}
+		}
 		return
 	}
 	if relayMode == relaymode.Embeddings && c.GetInt(ctxkey.Channel) == channeltype.OpenAI {

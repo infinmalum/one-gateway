@@ -184,7 +184,7 @@ func chatStreamHandler(c *gin.Context, streamUrl string) (responseText string, e
 	}
 
 	if !doneRendered {
-		render.Done(c)
+		return responseText, errors.New("Replicate stream ended before done event")
 	}
 
 	return responseText, nil

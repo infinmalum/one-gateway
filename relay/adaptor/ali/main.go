@@ -185,6 +185,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 	})
 
 	common.SetEventStreamHeaders(c)
+	complete := false
 
 	for scanner.Scan() {
 		data := scanner.Text()
@@ -208,6 +209,9 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 		if response == nil {
 			continue
 		}
+		for _, choice := range aliResponse.Output.Choices {
+			complete = complete || choice.FinishReason != "" && choice.FinishReason != "null"
+		}
 		err = render.ObjectData(c, response)
 		if err != nil {
 			logger.SysError(err.Error())
@@ -215,7 +219,12 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 	}
 
 	if err := scanner.Err(); err != nil {
-		logger.SysError("error reading stream: " + err.Error())
+		_ = resp.Body.Close()
+		return openai.ErrorWrapper(err, "stream_read_failed", http.StatusBadGateway), &usage
+	}
+	if !complete {
+		_ = resp.Body.Close()
+		return openai.ErrorWrapper(io.ErrUnexpectedEOF, "stream_incomplete", http.StatusBadGateway), &usage
 	}
 
 	render.Done(c)

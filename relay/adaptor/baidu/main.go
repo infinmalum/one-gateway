@@ -142,6 +142,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 	scanner.Split(bufio.ScanLines)
 
 	common.SetEventStreamHeaders(c)
+	complete := false
 
 	for scanner.Scan() {
 		data := scanner.Text()
@@ -161,6 +162,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 			usage.PromptTokens = baiduResponse.Usage.PromptTokens
 			usage.CompletionTokens = baiduResponse.Usage.TotalTokens - baiduResponse.Usage.PromptTokens
 		}
+		complete = complete || baiduResponse.IsEnd
 		response := streamResponseBaidu2OpenAI(&baiduResponse)
 		err = render.ObjectData(c, response)
 		if err != nil {
@@ -169,7 +171,12 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 	}
 
 	if err := scanner.Err(); err != nil {
-		logger.SysError("error reading stream: " + err.Error())
+		_ = resp.Body.Close()
+		return openai.ErrorWrapper(err, "stream_read_failed", http.StatusBadGateway), &usage
+	}
+	if !complete {
+		_ = resp.Body.Close()
+		return openai.ErrorWrapper(io.ErrUnexpectedEOF, "stream_incomplete", http.StatusBadGateway), &usage
 	}
 
 	render.Done(c)

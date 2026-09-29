@@ -20,17 +20,17 @@ type Selection struct {
 func SelectChannel(input Selection) (*model.Channel, *HTTPError) {
 	if input.SpecificID != 0 {
 		if input.SpecificID < 0 {
-			return nil, &HTTPError{http.StatusBadRequest, "invalid channel ID"}
+			return nil, &HTTPError{Status: http.StatusBadRequest, Message: "invalid channel ID"}
 		}
 		channel, err := model.GetChannelById(input.SpecificID, true)
 		if err != nil || channel == nil {
-			return nil, &HTTPError{http.StatusBadRequest, "invalid channel ID"}
+			return nil, &HTTPError{Status: http.StatusBadRequest, Message: "invalid channel ID"}
 		}
 		if channel.Status != model.ChannelStatusEnabled {
-			return nil, &HTTPError{http.StatusForbidden, "selected channel is disabled"}
+			return nil, &HTTPError{Status: http.StatusForbidden, Message: "selected channel is disabled"}
 		}
 		if input.Type >= 0 && channel.Type != input.Type {
-			return nil, &HTTPError{http.StatusBadRequest, "selected channel does not support this protocol"}
+			return nil, &HTTPError{Status: http.StatusBadRequest, Message: "selected channel does not support this protocol"}
 		}
 		return channel, nil
 	}
@@ -44,7 +44,7 @@ func SelectChannel(input Selection) (*model.Channel, *HTTPError) {
 		channel, err = model.GetRandomSatisfiedChannelExcluding(input.Group, input.Model, input.IgnorePriority, input.Excluded)
 	}
 	if err != nil || channel == nil {
-		return nil, &HTTPError{http.StatusServiceUnavailable, "no compatible channel for this model"}
+		return nil, &HTTPError{Status: http.StatusServiceUnavailable, Message: "no compatible channel for this model"}
 	}
 	return channel, nil
 }

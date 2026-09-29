@@ -51,8 +51,8 @@ func NativeOpenAIResponses(c *gin.Context) {
 	forwardNative(c, nativeInput{protocol: native.OpenAIResponses, model: fields.Model, stream: fields.Stream, maxOutputTokens: fields.MaxOutputTokens, body: body})
 }
 
-// NativeOpenAIChat forwards OpenAI channels without the legacy Chat adapter.
-// Other channel types still use their existing conversion path.
+// NativeOpenAIChat forwards channels that speak the OpenAI Chat wire format
+// through the shared lifecycle.
 func NativeOpenAIChat(c *gin.Context) {
 	nativeOpenAIChat(c, native.OpenAIChat)
 }
@@ -262,6 +262,11 @@ func forwardNative(c *gin.Context, input nativeInput) {
 		RetryLimit: config.RetryTimes,
 	})
 	if result != nil {
+		if result.Upstream != nil {
+			c.JSON(result.Status, native.ErrorBodyWithUpstream(input.protocol, result.Status, result.Message,
+				result.Upstream.Type, result.Upstream.Code, result.Upstream.Param))
+			return
+		}
 		writeNativeError(c, input.protocol, result.Status, errors.New(result.Message))
 	}
 }

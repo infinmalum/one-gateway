@@ -118,6 +118,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 	})
 
 	common.SetEventStreamHeaders(c)
+	complete := false
 
 	for scanner.Scan() {
 		data := scanner.Text()
@@ -137,6 +138,9 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 			usage.CompletionTokens = ollamaResponse.EvalCount
 			usage.TotalTokens = ollamaResponse.PromptEvalCount + ollamaResponse.EvalCount
 		}
+		if ollamaResponse.Done {
+			complete = true
+		}
 
 		response := streamResponseOllama2OpenAI(&ollamaResponse)
 		err = render.ObjectData(c, response)
@@ -145,15 +149,19 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 		}
 	}
 
-	if err := scanner.Err(); err != nil {
-		logger.SysError("error reading stream: " + err.Error())
+	scanErr := scanner.Err()
+	if scanErr == nil && complete {
+		render.Done(c)
 	}
-
-	render.Done(c)
-
 	err := resp.Body.Close()
 	if err != nil {
 		return openai.ErrorWrapper(err, "close_response_body_failed", http.StatusInternalServerError), nil
+	}
+	if scanErr != nil {
+		return openai.ErrorWrapper(scanErr, "stream_read_failed", http.StatusBadGateway), &usage
+	}
+	if !complete {
+		return openai.ErrorWrapper(fmt.Errorf("Ollama stream ended before done=true"), "stream_incomplete", http.StatusBadGateway), &usage
 	}
 
 	return nil, &usage

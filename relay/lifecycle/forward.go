@@ -62,8 +62,9 @@ type Request struct {
 }
 
 type HTTPError struct {
-	Status  int
-	Message string
+	Status   int
+	Message  string
+	Upstream *UpstreamError
 }
 
 // Forward executes native passthrough and explicit JSON protocol conversions.
@@ -77,7 +78,7 @@ func Forward(ctx context.Context, dst http.ResponseWriter, input Request) *HTTPE
 	if input.Principal.Group == "" {
 		group, err := model.CacheGetUserGroup(input.Principal.UserID)
 		if err != nil {
-			return &HTTPError{http.StatusInternalServerError, "failed to load user group"}
+			return &HTTPError{Status: http.StatusInternalServerError, Message: "failed to load user group"}
 		}
 		input.Principal.Group = group
 	}
@@ -103,28 +104,28 @@ func Forward(ctx context.Context, dst http.ResponseWriter, input Request) *HTTPE
 			return primaryErr
 		}
 		input.Channel = selected
-	} else if input.Channel.Type != requiredChannelType(upstreamProtocol) {
+	} else if !channelSupportsProtocol(input.Channel.Type, upstreamProtocol) {
 		matched := false
 		for _, candidate := range input.FallbackUpstreamProtocols {
-			if input.Channel.Type == requiredChannelType(candidate) {
+			if channelSupportsProtocol(input.Channel.Type, candidate) {
 				upstreamProtocol = candidate
 				matched = true
 				break
 			}
 		}
 		if !matched {
-			return &HTTPError{http.StatusBadRequest, "selected channel does not support this protocol"}
+			return &HTTPError{Status: http.StatusBadRequest, Message: "selected channel does not support this protocol"}
 		}
 	}
 	converter, err := bridge.For(input.Protocol, upstreamProtocol)
 	if err != nil {
-		return &HTTPError{http.StatusUnprocessableEntity, err.Error()}
+		return &HTTPError{Status: http.StatusUnprocessableEntity, Message: err.Error()}
 	}
 	var streamConverter bridge.StreamConverter
 	if converter != nil && input.Stream {
 		candidate, ok := converter.(bridge.StreamConverter)
 		if !ok {
-			return &HTTPError{http.StatusUnprocessableEntity, "streaming protocol conversion is not supported"}
+			return &HTTPError{Status: http.StatusUnprocessableEntity, Message: "streaming protocol conversion is not supported"}
 		}
 		streamConverter = candidate
 	}
@@ -171,17 +172,17 @@ func Forward(ctx context.Context, dst http.ResponseWriter, input Request) *HTTPE
 			var err error
 			body, err = converter.Request(body, mappedModel)
 			if err != nil {
-				return &HTTPError{http.StatusUnprocessableEntity, err.Error()}
+				return &HTTPError{Status: http.StatusUnprocessableEntity, Message: err.Error()}
 			}
 		}
 		req, err := native.BuildRequest(ctx, native.Request{
-			Protocol: upstreamProtocol, BaseURL: channel.BaseURL, Version: version,
+			Protocol: upstreamProtocol, ChannelType: channel.Type, BaseURL: channel.BaseURL, Version: version,
 			Model: mappedModel, Action: action, APIKey: channel.APIKey,
 			SystemPrompt: channel.SystemPrompt, Body: body,
 			Headers: input.Headers, Query: input.Query,
 		})
 		if err != nil {
-			return &HTTPError{http.StatusBadRequest, err.Error()}
+			return &HTTPError{Status: http.StatusBadRequest, Message: err.Error()}
 		}
 		reservation, err := billing.ReserveNativeQuota(ctx, billing.NativeReservation{
 			UserID: input.Principal.UserID, TokenID: input.Principal.TokenID,
@@ -190,7 +191,7 @@ func Forward(ctx context.Context, dst http.ResponseWriter, input Request) *HTTPE
 			Group: input.Principal.Group, SystemPromptReset: channel.SystemPrompt != "" && supportsSystemPrompt(upstreamProtocol),
 		}, input.MaxOutputTokens)
 		if err != nil {
-			return &HTTPError{http.StatusForbidden, err.Error()}
+			return &HTTPError{Status: http.StatusForbidden, Message: err.Error()}
 		}
 		response, err := providerClient.Do(req)
 		if err != nil {
@@ -200,13 +201,13 @@ func Forward(ctx context.Context, dst http.ResponseWriter, input Request) *HTTPE
 				channel = next
 				continue
 			}
-			return &HTTPError{http.StatusBadGateway, "upstream request failed"}
+			return &HTTPError{Status: http.StatusBadGateway, Message: "upstream request failed"}
 		}
 		if response.StatusCode < 200 || response.StatusCode >= 300 {
 			reservation.Refund(settlementContext)
 			if response.StatusCode >= 300 && response.StatusCode < 400 {
 				_ = response.Body.Close()
-				return &HTTPError{http.StatusBadGateway, "upstream redirect is not allowed"}
+				return &HTTPError{Status: http.StatusBadGateway, Message: "upstream redirect is not allowed"}
 			}
 			if Retryable(response.StatusCode, false, input.Principal.SpecificChannel, ctx.Err() != nil) {
 				if next, ok := selectRetry(ctx, input, channel, tried, &retries); ok {
@@ -216,9 +217,9 @@ func Forward(ctx context.Context, dst http.ResponseWriter, input Request) *HTTPE
 				}
 			}
 			if converter != nil {
-				message := ReadUpstreamError(response).Message
+				upstreamError := ReadUpstreamError(response)
 				copyHeaders(dst.Header(), response.Header)
-				return &HTTPError{response.StatusCode, message}
+				return &HTTPError{Status: response.StatusCode, Message: upstreamError.Message, Upstream: &upstreamError}
 			}
 			copyHeaders(dst.Header(), response.Header)
 			dst.WriteHeader(response.StatusCode)
@@ -229,7 +230,7 @@ func Forward(ctx context.Context, dst http.ResponseWriter, input Request) *HTTPE
 		if input.Stream && !strings.HasPrefix(response.Header.Get("Content-Type"), "text/event-stream") {
 			reservation.Refund(settlementContext)
 			_ = response.Body.Close()
-			return &HTTPError{http.StatusBadGateway, "upstream did not return an event stream"}
+			return &HTTPError{Status: http.StatusBadGateway, Message: "upstream did not return an event stream"}
 		}
 		if streamConverter != nil {
 			copyHeaders(dst.Header(), response.Header)
@@ -251,12 +252,12 @@ func Forward(ctx context.Context, dst http.ResponseWriter, input Request) *HTTPE
 			_ = response.Body.Close()
 			if readErr != nil || len(body) > maxConvertedResponse {
 				reservation.Settle(settlementContext, native.Usage{}, false, true)
-				return &HTTPError{http.StatusBadGateway, "upstream response could not be read"}
+				return &HTTPError{Status: http.StatusBadGateway, Message: "upstream response could not be read"}
 			}
 			converted, usage, convertErr := converter.Response(body, input.Model)
 			if convertErr != nil {
 				reservation.Settle(settlementContext, native.Usage{}, false, true)
-				return &HTTPError{http.StatusBadGateway, convertErr.Error()}
+				return &HTTPError{Status: http.StatusBadGateway, Message: convertErr.Error()}
 			}
 			copyHeaders(dst.Header(), response.Header)
 			dst.Header().Set("Content-Type", "application/json")
@@ -314,13 +315,13 @@ func (f flushingWriter) Flush() {
 func selectInitial(input Request, upstreamProtocol native.Protocol) (Channel, *HTTPError) {
 	requiredType := requiredChannelType(upstreamProtocol)
 	if requiredType < 0 {
-		return Channel{}, &HTTPError{http.StatusBadRequest, "unsupported native protocol"}
+		return Channel{}, &HTTPError{Status: http.StatusBadRequest, Message: "unsupported native protocol"}
 	}
 	specificID := 0
 	if input.Principal.SpecificChannel {
 		specificID = input.Principal.SpecificChannelID
 		if specificID <= 0 {
-			return Channel{}, &HTTPError{http.StatusBadRequest, "invalid channel ID"}
+			return Channel{}, &HTTPError{Status: http.StatusBadRequest, Message: "invalid channel ID"}
 		}
 	}
 	selected, selectErr := SelectChannel(Selection{Group: input.Principal.Group, Model: input.Model, Type: requiredType, SpecificID: specificID})
@@ -340,7 +341,7 @@ func selectInitial(input Request, upstreamProtocol native.Protocol) (Channel, *H
 	var err error
 	channel, err := channelFromModel(selected)
 	if err != nil {
-		return Channel{}, &HTTPError{http.StatusInternalServerError, "failed to load channel configuration"}
+		return Channel{}, &HTTPError{Status: http.StatusInternalServerError, Message: "failed to load channel configuration"}
 	}
 	return channel, nil
 }
@@ -356,6 +357,13 @@ func requiredChannelType(protocol native.Protocol) int {
 	default:
 		return -1
 	}
+}
+
+func channelSupportsProtocol(kind int, protocol native.Protocol) bool {
+	if protocol == native.OpenAIChat {
+		return channeltype.NativeChatCompatible(kind)
+	}
+	return kind == requiredChannelType(protocol)
 }
 
 func selectRetry(ctx context.Context, input Request, failed Channel, tried map[int]bool, remaining *int) (Channel, bool) {

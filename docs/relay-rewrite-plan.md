@@ -32,7 +32,7 @@ tests.
 
 | Client endpoint | Current upstream selection | Current behavior and gap |
 | --- | --- | --- |
-| `POST /v1/chat/completions` | Any configured channel with the model in the user's group | OpenAI channels use native JSON/SSE passthrough. Anthropic channels use an explicit text/user-image/function-tool converter, and Gemini channels an explicit text converter, in both synchronous and streaming forms. Unsupported fields are rejected; other channels still use legacy converters. Official SDK conformance remains. |
+| `POST /v1/chat/completions` | Any configured channel with the model in the user's group | OpenAI wire-format channels use native JSON/SSE passthrough with their configured URL and authentication variants. Anthropic channels use an explicit text/user-image/function-tool converter, and Gemini channels an explicit text converter, in both synchronous and streaming forms. Unsupported fields are rejected; provider-specific formats still use legacy converters. OpenAI and Anthropic Go SDK offline fixtures pass. |
 | `POST /v1/responses` | OpenAI channels with the model in the user's group | Native synchronous and SSE create, preserving response items and events; requires an explicit `model`. Background mode and retrieval/cancellation routes remain unsupported. |
 | `POST /v1/messages` | Anthropic channels first; OpenAI channels, then Gemini channels, for the supported conversion subsets | Native request and response forwarding, including SSE, usage, mapping, configured system prompt, and retry before response output. Synchronous and streaming text/user-image/function-tool requests can convert to OpenAI Chat; synchronous and streaming text requests can convert to Gemini. Assistant-side media and other media conversion remain unsupported. |
 | `POST /v1[beta]/models/{model}:generateContent` and `:streamGenerateContent` | Gemini channels with the model in the user's group | Native forwarding on both versions, with retry before response output; no cross-protocol conversion. |
@@ -72,6 +72,11 @@ silently dropped.
 - Chat Completions to Anthropic Messages: `response_format`, `n`, logprobs,
   image `detail`, audio parts, named tools other than functions, developer or
   system messages after the conversation starts, and `refusal` outputs.
+- Assistant-side media remains unsupported in Chat/Messages conversion:
+  OpenAI's assistant content-part schema has text and refusal parts, with an
+  audio response ID as a separate field; Anthropic's image/document sources
+  and signed thinking blocks have no matching Chat assistant fields. Both
+  directions reject these blocks instead of moving them to a user turn.
 - Anthropic Messages to Chat Completions: `thinking` and `redacted_thinking`
   blocks, citations, server tool blocks, text after a `tool_use` block in the
   same message, non-null `stop_sequence` values, provider containers, and
@@ -180,10 +185,25 @@ silently dropped.
 - [x] Document protocol features that cannot be represented in the supported
   conversions; every such field fails the request or stream instead of being
   dropped.
-- [ ] Move the remaining retained Chat channel types off the legacy controller.
-- [ ] Complete Chat Completions <-> Messages conversion for the remaining
-  representable features (assistant-side media, error envelope mapping).
-- [ ] Gate: official OpenAI and Anthropic clients pass the common offline suite.
+- [x] Move the remaining retained Chat channel types off the legacy controller.
+  PaLM, Baidu, Zhipu, Ali, Xunfei, AIProxyLibrary, Tencent, Ollama, AWS
+  Claude, Coze, Cohere, Cloudflare, DeepL, VertexAI, Replicate, and Proxy
+  now enter the shared Chat lifecycle for reservation, retry, and settlement.
+  Their provider-specific wire conversion and response handling remain in
+  adapters behind the lifecycle's adapter attempt until the phase 5 transport
+  extraction; none is treated as OpenAI-compatible passthrough. Adapter
+  streams for Ollama, Replicate, AWS Claude, Ali, Baidu, Zhipu, Cohere, Coze,
+  Tencent, AIProxyLibrary, and Cloudflare now require their terminal event
+  before emitting `[DONE]`; scanner errors no longer synthesize completion.
+- [x] Complete the Chat Completions <-> Messages error-envelope mapping and
+  audit assistant-side media. Converted HTTP errors use the client protocol's
+  envelope and retain provider details. Assistant-side image and audio blocks
+  have no shared standard Chat/Messages representation in the official client
+  schemas and fail explicitly.
+- [x] Gate: official OpenAI and Anthropic Go clients pass the common offline
+  suite for native and converted Chat/Messages requests. Local HTTP fixtures
+  cover synchronous text, image input, streaming text, and provider errors;
+  SDK retries are disabled so the gateway controls retry policy.
 
 ### 4. Gemini as a first-class protocol
 
@@ -235,7 +255,8 @@ forwarding remains the default for same-protocol requests.
   and streaming text/user-image/function-tool subset, then to Gemini channels
   for the text subset. OpenAI Chat uses the native lifecycle on OpenAI,
   Anthropic, and Gemini channels in both synchronous and streaming forms;
-  other channel types still use legacy adapters during migration.
+  OpenAI wire-format channel types use the same lifecycle; provider-specific
+  channel formats still use legacy adapters during migration.
 - Phase 0: the endpoint inventory and local HTTP fixtures cover native request
   and SSE preservation, credential substitution, channel selection, upstream
   errors, multimodal input, cancellation, and quota settlement. Official SDK
@@ -272,8 +293,15 @@ forwarding remains the default for same-protocol requests.
   Streaming Chat Completions on Anthropic and Gemini channels now also use the
   shared lifecycle: Anthropic events convert to Chat chunks (and Chat chunks to
   Anthropic events) with tool calls, stop reasons, usage, and provider envelope
-  extensions preserved; the remaining channel types still use legacy
-  converters, and official client fixtures remain.
+  extensions preserved. Channels using the OpenAI Chat wire format now use the
+  same lifecycle, including their existing path and authentication variants.
+  The official OpenAI and Anthropic Go clients pass local native and converted
+  synchronous and streaming fixtures, including image inputs and errors.
+  Provider-specific Chat formats now enter the shared lifecycle through an
+  adapter attempt, so Chat selection, retries, and billing no longer use the
+  legacy controller. Their Gin-based wire adapters are retained for phase 5
+  extraction. Converted HTTP errors now use the client protocol's envelope and
+  retain provider code, parameter, and type details.
 - Phase 4: native Gemini routing is in place; client conformance remains. The
   synchronous and streaming Chat-to-Gemini text subset now uses the shared
   lifecycle, preserving Gemini response metadata in a named extension and

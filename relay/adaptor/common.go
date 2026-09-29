@@ -8,6 +8,7 @@ import (
 	"github.com/infinmalum/one-gateway/relay/meta"
 	"io"
 	"net/http"
+	"strings"
 )
 
 func SetupCommonRequestHeader(c *gin.Context, req *http.Request, meta *meta.Meta) {
@@ -23,7 +24,7 @@ func DoRequestHelper(a Adaptor, c *gin.Context, meta *meta.Meta, requestBody io.
 	if err != nil {
 		return nil, fmt.Errorf("get request url failed: %w", err)
 	}
-	req, err := http.NewRequest(c.Request.Method, fullRequestURL, requestBody)
+	req, err := http.NewRequestWithContext(c.Request.Context(), c.Request.Method, fullRequestURL, requestBody)
 	if err != nil {
 		return nil, fmt.Errorf("new request failed: %w", err)
 	}
@@ -39,7 +40,18 @@ func DoRequestHelper(a Adaptor, c *gin.Context, meta *meta.Meta, requestBody io.
 }
 
 func DoRequest(c *gin.Context, req *http.Request) (*http.Response, error) {
-	resp, err := client.HTTPClient.Do(req)
+	httpClient := client.HTTPClient
+	if httpClient == nil {
+		httpClient = http.DefaultClient
+	}
+	providerClient := *httpClient
+	providerClient.CheckRedirect = func(next *http.Request, previous []*http.Request) error {
+		if len(previous) >= 3 || next.URL.Scheme != previous[0].URL.Scheme || !strings.EqualFold(next.URL.Host, previous[0].URL.Host) {
+			return http.ErrUseLastResponse
+		}
+		return nil
+	}
+	resp, err := providerClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
