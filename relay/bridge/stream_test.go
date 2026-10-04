@@ -389,11 +389,146 @@ func TestGeminiStreamToAnthropicEvents(t *testing.T) {
 	}
 }
 
-func TestGeminiStreamRejectsUnsupportedParts(t *testing.T) {
-	fixture := "data: {\"candidates\":[{\"content\":{\"role\":\"model\",\"parts\":[{\"functionCall\":{\"name\":\"search\",\"args\":{}}}]},\"finishReason\":\"STOP\"}],\"usageMetadata\":{\"promptTokenCount\":1}}\n\n"
+func TestGeminiStreamRejectsThoughtPartsForChat(t *testing.T) {
+	fixture := "data: {\"candidates\":[{\"content\":{\"role\":\"model\",\"parts\":[{\"text\":\"secret\",\"thought\":true}]},\"finishReason\":\"STOP\"}],\"usageMetadata\":{\"promptTokenCount\":1,\"candidatesTokenCount\":1}}\n\n"
 	writer := &recordingWriter{}
-	if _, err := (chatGemini{}).Stream(writer, strings.NewReader(fixture), "alias"); err == nil || !strings.Contains(err.Error(), "cannot be converted") {
-		t.Fatalf("function call part was accepted: %v", err)
+	usage, err := (chatGemini{}).Stream(writer, strings.NewReader(fixture), "alias")
+	if err == nil || !strings.Contains(err.Error(), "cannot be represented") {
+		t.Fatalf("thought part was accepted: %v", err)
+	}
+	if !strings.Contains(writer.buffer.String(), "gateway_stream_error") || strings.Contains(writer.buffer.String(), "[DONE]") {
+		t.Fatalf("conversion failure was not surfaced to the client: %s", writer.buffer.String())
+	}
+	if usage.Complete {
+		t.Fatal("failed stream claimed completion")
+	}
+}
+
+func TestGeminiStreamToolCallToChatChunks(t *testing.T) {
+	fixture := "data: {\"responseId\":\"r_tool\",\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"Searching\"}]},\"usageMetadata\":null}],\"usageMetadata\":{\"promptTokenCount\":9,\"candidatesTokenCount\":1}}\n\n" +
+		"data: {\"candidates\":[{\"content\":{\"parts\":[{\"functionCall\":{\"id\":\"gem-call-1\",\"name\":\"search\",\"args\":{\"q\":\"test\"}}}]},\"finishReason\":\"STOP\"}],\"usageMetadata\":{\"promptTokenCount\":9,\"candidatesTokenCount\":5,\"thoughtsTokenCount\":2,\"totalTokenCount\":16}}\n\n"
+	writer := &recordingWriter{}
+	usage, err := (chatGemini{}).Stream(writer, strings.NewReader(fixture), "client-alias")
+	if err != nil {
+		t.Fatal(err)
+	}
+	events := writer.events(t)
+	if len(events) != 4 || events[len(events)-1] != "[DONE]" {
+		t.Fatalf("Gemini tool stream chunk sequence is wrong: %v", events)
+	}
+	var text string
+	var calls []struct {
+		Index    int    `json:"index"`
+		ID       string `json:"id"`
+		Function struct {
+			Name      string `json:"name"`
+			Arguments string `json:"arguments"`
+		} `json:"function"`
+	}
+	finish := ""
+	for _, raw := range events[:3] {
+		var chunk struct {
+			ID      string `json:"id"`
+			Choices []struct {
+				Delta struct {
+					Content   string `json:"content"`
+					ToolCalls []struct {
+						Index    int    `json:"index"`
+						ID       string `json:"id"`
+						Function struct {
+							Name      string `json:"name"`
+							Arguments string `json:"arguments"`
+						} `json:"function"`
+					} `json:"tool_calls"`
+				} `json:"delta"`
+				FinishReason string `json:"finish_reason"`
+			} `json:"choices"`
+		}
+		if err := json.Unmarshal([]byte(raw), &chunk); err != nil {
+			t.Fatal(err)
+		}
+		if chunk.ID != "r_tool" {
+			t.Fatalf("chunk lost the upstream response ID: %s", raw)
+		}
+		for _, choice := range chunk.Choices {
+			text += choice.Delta.Content
+			calls = append(calls, choice.Delta.ToolCalls...)
+			if choice.FinishReason != "" {
+				finish = choice.FinishReason
+			}
+		}
+	}
+	if text != "Searching" || finish != "tool_calls" || len(calls) != 1 || calls[0].ID != "gem-call-1" || calls[0].Function.Name != "search" || calls[0].Function.Arguments != `{"q":"test"}` {
+		t.Fatalf("Gemini tool stream conversion lost fields: text %q finish %q calls %+v", text, finish, calls)
+	}
+	if !usage.Complete || usage.Input != 9 || usage.Output != 7 {
+		t.Fatalf("Gemini tool stream usage is wrong: %+v", usage)
+	}
+}
+
+func TestGeminiStreamToolCallToAnthropicEvents(t *testing.T) {
+	fixture := "data: {\"responseId\":\"r_tool\",\"candidates\":[{\"content\":{\"parts\":[{\"functionCall\":{\"name\":\"search\",\"args\":{\"q\":\"x\"}}}]},\"finishReason\":\"STOP\"}],\"usageMetadata\":{\"promptTokenCount\":5,\"candidatesTokenCount\":3}}\n\n"
+	writer := &recordingWriter{}
+	usage, err := (messagesGemini{}).Stream(writer, strings.NewReader(fixture), "client-alias")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := writer.buffer.String()
+	for _, want := range []string{
+		"event: message_start",
+		`"content_block":{"id":"toolu_`,
+		`"name":"search"`,
+		`"input_json_delta"`,
+		`"partial_json":"{\"q\":\"x\"}"`,
+		`"content_block_stop"`,
+		`"stop_reason":"tool_use"`,
+		"event: message_stop",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("Anthropic tool stream is missing %q: %s", want, body)
+		}
+	}
+	if !usage.Complete || usage.Input != 5 || usage.Output != 3 {
+		t.Fatalf("Gemini tool stream usage is wrong: %+v", usage)
+	}
+}
+
+func TestGeminiStreamThinkingToAnthropicEvents(t *testing.T) {
+	fixture := "data: {\"responseId\":\"r_think\",\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"pondering\",\"thought\":true}]},\"usageMetadata\":null}],\"usageMetadata\":{\"promptTokenCount\":3,\"candidatesTokenCount\":1}}\n\n" +
+		"data: {\"candidates\":[{\"content\":{\"parts\":[{\"thoughtSignature\":\"c2ln\"}]},\"usageMetadata\":null}],\"usageMetadata\":{\"promptTokenCount\":3,\"candidatesTokenCount\":2}}\n\n" +
+		"data: {\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"answer\"}]},\"finishReason\":\"STOP\"}],\"usageMetadata\":{\"promptTokenCount\":3,\"candidatesTokenCount\":4,\"thoughtsTokenCount\":3,\"totalTokenCount\":10}}\n\n"
+	writer := &recordingWriter{}
+	usage, err := (messagesGemini{}).Stream(writer, strings.NewReader(fixture), "client-alias")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := writer.buffer.String()
+	for _, want := range []string{
+		`"content_block":{"thinking":"","type":"thinking"}`,
+		`"thinking":"pondering","type":"thinking_delta"`,
+		`"signature":"c2ln","type":"signature_delta"`,
+		`"content_block":{"text":"","type":"text"}`,
+		`"text":"answer","type":"text_delta"`,
+		`"stop_reason":"end_turn"`,
+		"event: message_stop",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("Anthropic thinking stream is missing %q: %s", want, body)
+		}
+	}
+	if !usage.Complete || usage.Input != 3 || usage.Output != 7 {
+		t.Fatalf("Gemini thinking stream usage is wrong: %+v", usage)
+	}
+}
+
+func TestGeminiStreamSignatureWithoutThinkingFails(t *testing.T) {
+	fixture := "data: {\"candidates\":[{\"content\":{\"parts\":[{\"thoughtSignature\":\"c2ln\"}]}}],\"usageMetadata\":{\"promptTokenCount\":1,\"candidatesTokenCount\":1}}\n\n"
+	writer := &recordingWriter{}
+	if _, err := (messagesGemini{}).Stream(writer, strings.NewReader(fixture), "alias"); err == nil || !strings.Contains(err.Error(), "thinking block") {
+		t.Fatalf("orphan thought signature was accepted: %v", err)
+	}
+	if strings.Contains(writer.buffer.String(), "message_stop") {
+		t.Fatal("failed stream produced a message_stop event")
 	}
 }
 
@@ -440,14 +575,52 @@ func TestMessagesToGeminiTextConversation(t *testing.T) {
 func TestMessagesToGeminiRejectsLossyRequests(t *testing.T) {
 	for _, body := range []string{
 		`{"model":"alias","max_tokens":8,"messages":[{"role":"user","content":[{"type":"image","source":{"type":"url","url":"https://example.com/a.png"}}]}]}`,
-		`{"model":"alias","max_tokens":8,"messages":[{"role":"user","content":"hi"}],"tools":[{"name":"search","input_schema":{"type":"object"}}]}`,
+		`{"model":"alias","max_tokens":8,"messages":[{"role":"user","content":[{"type":"document","source":{"type":"url","url":"https://example.com/a.pdf"}}]}]}`,
+		`{"model":"alias","max_tokens":8,"messages":[{"role":"user","content":[{"type":"document","source":{"type":"base64","media_type":"text/plain","data":"aGVsbG8="}}]}]}`,
+		`{"model":"alias","max_tokens":8,"messages":[{"role":"user","content":[{"type":"thinking","thinking":"private"}]}]}`,
+		`{"model":"alias","max_tokens":8,"messages":[{"role":"assistant","content":[{"type":"redacted_thinking","data":"c2ln"}]}]}`,
+		`{"model":"alias","max_tokens":8,"messages":[{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"found"}]}]}`,
 		`{"model":"alias","max_tokens":8,"messages":[{"role":"user","content":"hi"}],"thinking":{"type":"enabled","budget_tokens":8}}`,
 		`{"model":"alias","max_tokens":8,"messages":[{"role":"user","content":"hi"}],"stop_sequences":["1","2","3","4","5","6"]}`,
+		`{"model":"alias","max_tokens":8,"messages":[{"role":"user","content":"hi"}],"tools":[{"type":"web_search_20250305","name":"web_search"}]}`,
 		`{"model":"alias","max_tokens":0,"messages":[{"role":"user","content":"hi"}]}`,
 	} {
 		if _, err := MessagesToGemini([]byte(body), "gemini"); err == nil {
 			t.Fatalf("lossy Messages request was accepted: %s", body)
 		}
+	}
+}
+
+func TestMessagesToGeminiConvertsToolsAndThinking(t *testing.T) {
+	input := []byte(`{"model":"alias","max_tokens":64,"messages":[{"role":"user","content":[{"type":"text","text":"find it"},{"type":"image","source":{"type":"base64","media_type":"image/png","data":"aGVsbG8="}},{"type":"document","source":{"type":"base64","media_type":"application/pdf","data":"cGRm"}}]},{"role":"assistant","content":[{"type":"thinking","thinking":"private reasoning","signature":"c2ln"},{"type":"text","text":"calling"},{"type":"tool_use","id":"toolu_1","name":"search","input":{"q":"test"}}]},{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"found"}]}],"tools":[{"name":"search","description":"Search","input_schema":{"type":"object"}}],"tool_choice":{"type":"any"}}`)
+	converted, err := MessagesToGemini(input, "gemini-upstream")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(converted)
+	for _, want := range []string{
+		`"tools":[{"functionDeclarations":[{"description":"Search","name":"search","parameters":{"type":"object"}}]}]`,
+		`"functionCallingConfig":{"mode":"ANY"}`,
+		`"inlineData":{"data":"aGVsbG8=","mimeType":"image/png"}`,
+		`"inlineData":{"data":"cGRm","mimeType":"application/pdf"}`,
+		`{"text":"private reasoning","thought":true,"thoughtSignature":"c2ln"}`,
+		`"functionCall":{"args":{"q":"test"},"id":"toolu_1","name":"search"}`,
+		`"functionResponse":{"id":"toolu_1","name":"search","response":{"result":"found"}}`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("Messages to Gemini conversion is missing %q: %s", want, body)
+		}
+	}
+	var result struct {
+		Contents []struct {
+			Role string `json:"role"`
+		} `json:"contents"`
+	}
+	if err := json.Unmarshal(converted, &result); err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Contents) != 3 || result.Contents[1].Role != "model" || result.Contents[2].Role != "user" {
+		t.Fatalf("content roles were lost: %s", body)
 	}
 }
 
@@ -489,9 +662,59 @@ func TestGeminiToMessagesPreservesUsageAndMetadata(t *testing.T) {
 	}
 }
 
+func TestGeminiToMessagesConvertsToolsAndThinking(t *testing.T) {
+	input := []byte(`{"responseId":"resp_mix","modelVersion":"gemini-upstream","candidates":[{"content":{"role":"model","parts":[{"text":"pondering","thought":true},{"thoughtSignature":"c2ln"},{"text":"answer"},{"functionCall":{"id":"gem-call-9","name":"search","args":{"q":"x"}}}]},"finishReason":"STOP","safetyRatings":[]}],"usageMetadata":{"promptTokenCount":11,"cachedContentTokenCount":2,"candidatesTokenCount":6,"thoughtsTokenCount":3,"totalTokenCount":20}}`)
+	converted, usage, err := GeminiToMessages(input, "client-alias")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var result struct {
+		ID      string `json:"id"`
+		Content []struct {
+			Type      string          `json:"type"`
+			Text      string          `json:"text"`
+			Thinking  string          `json:"thinking"`
+			Signature string          `json:"signature"`
+			ID        string          `json:"id"`
+			Name      string          `json:"name"`
+			Input     json.RawMessage `json:"input"`
+		} `json:"content"`
+		StopReason string `json:"stop_reason"`
+		Usage      struct {
+			Input  int64 `json:"input_tokens"`
+			Cached int64 `json:"cache_read_input_tokens"`
+			Output int64 `json:"output_tokens"`
+		} `json:"usage"`
+	}
+	if err := json.Unmarshal(converted, &result); err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Content) != 3 {
+		t.Fatalf("content blocks were not converted: %s", converted)
+	}
+	thinking, text, toolUse := result.Content[0], result.Content[1], result.Content[2]
+	if thinking.Type != "thinking" || thinking.Thinking != "pondering" || thinking.Signature != "c2ln" {
+		t.Fatalf("thinking block was lost: %s", converted)
+	}
+	if text.Type != "text" || text.Text != "answer" {
+		t.Fatalf("text block was lost: %s", converted)
+	}
+	if toolUse.Type != "tool_use" || toolUse.ID != "gem-call-9" || toolUse.Name != "search" || string(toolUse.Input) != `{"q":"x"}` {
+		t.Fatalf("tool_use block was lost: %s", converted)
+	}
+	if result.StopReason != "tool_use" || result.Usage.Input != 9 || result.Usage.Cached != 2 || result.Usage.Output != 9 {
+		t.Fatalf("stop reason or usage was wrong: %s usage %+v", converted, usage)
+	}
+	if usage.Input != 11 || usage.Output != 9 || !usage.Complete {
+		t.Fatalf("usage is wrong: %+v", usage)
+	}
+}
+
 func TestGeminiToMessagesRejectsUnrepresentableResponses(t *testing.T) {
 	for _, body := range []string{
-		`{"responseId":"r","candidates":[{"content":{"role":"model","parts":[{"functionCall":{"name":"s","args":{}}}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":1}}`,
+		`{"responseId":"r","candidates":[{"content":{"role":"model","parts":[{"functionCall":{"name":"s","args":{}},"thoughtSignature":"c2ln"}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":1,"candidatesTokenCount":2}}`,
+		`{"responseId":"r","candidates":[{"content":{"role":"model","parts":[{"inlineData":{"mimeType":"image/png","data":"aGVsbG8="}}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":1,"candidatesTokenCount":2}}`,
+		`{"responseId":"r","candidates":[{"content":{"role":"model","parts":[{"thoughtSignature":"c2ln"}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":1,"candidatesTokenCount":2}}`,
 		`{"responseId":"r","candidates":[{"content":{"role":"model","parts":[{"text":"ok"}]},"finishReason":"SAFETY"}],"usageMetadata":{"promptTokenCount":1}}`,
 		`{"responseId":"r","candidates":[{"content":{"role":"model","parts":[{"text":"a"},{"text":"b"}]},"finishReason":"STOP","index":1}],"usageMetadata":{"promptTokenCount":1,"candidatesTokenCount":1}}`,
 		`{"responseId":"r","candidates":[{"content":{"role":"user","parts":[{"text":"ok"}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":1}}`,

@@ -597,7 +597,7 @@ func TestNativeRoutesSelectMatchingProtocolAndPreserveWireData(t *testing.T) {
 	if err := db.Where("channel_id = ? AND type = ?", geminiBridgeChannel.Id, model.LogTypeConsume).First(&geminiBridgeLog).Error; err != nil || geminiBridgeLog.PromptTokens != 4 || geminiBridgeLog.CompletionTokens != 2 || !geminiBridgeLog.SystemPromptReset {
 		t.Fatalf("Chat to Gemini usage was not settled: %+v err %v", geminiBridgeLog, err)
 	}
-	unsupportedGeminiBridge := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"gemini-bridge-alias","messages":[{"role":"user","content":"hi"}],"tools":[{"type":"function","function":{"name":"search"}}]}`))
+	unsupportedGeminiBridge := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"gemini-bridge-alias","messages":[{"role":"user","content":"hi"}],"response_format":{"type":"json_object"}}`))
 	unsupportedGeminiBridge.Header.Set("Authorization", "Bearer sk-gateway-key")
 	unsupportedGeminiBridge.Header.Set("Content-Type", "application/json")
 	unsupportedGeminiBridgeResponse := httptest.NewRecorder()
@@ -907,16 +907,69 @@ func TestNativeRoutesSelectMatchingProtocolAndPreserveWireData(t *testing.T) {
 	backgroundRequest.Header.Set("Authorization", "Bearer sk-gateway-key")
 	backgroundResponse := httptest.NewRecorder()
 	r.ServeHTTP(backgroundResponse, backgroundRequest)
-	if backgroundResponse.Code != http.StatusUnprocessableEntity || responsesUpstreamCalls.Load() != 2 {
-		t.Fatalf("unsupported background response reached upstream: status %d calls %d", backgroundResponse.Code, responsesUpstreamCalls.Load())
+	if backgroundResponse.Code != http.StatusAccepted || !strings.Contains(backgroundResponse.Body.String(), `"status":"queued"`) {
+		t.Fatalf("background response create failed: status %d body %s", backgroundResponse.Code, backgroundResponse.Body.String())
+	}
+	var backgroundCreated struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(backgroundResponse.Body.Bytes(), &backgroundCreated); err != nil || backgroundCreated.ID == "" {
+		t.Fatalf("background response id missing: %s err %v", backgroundResponse.Body.String(), err)
+	}
+	var backgroundResult struct {
+		ID     string `json:"id"`
+		Status string `json:"status"`
+		Output []struct {
+			Type    string `json:"type"`
+			Content []struct {
+				Type string `json:"type"`
+				Text string `json:"text"`
+			} `json:"content"`
+		} `json:"output"`
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		retrieveRequest := httptest.NewRequest(http.MethodGet, "/v1/responses/"+backgroundCreated.ID, nil)
+		retrieveRequest.Header.Set("Authorization", "Bearer sk-gateway-key")
+		retrieveResponse := httptest.NewRecorder()
+		r.ServeHTTP(retrieveResponse, retrieveRequest)
+		if retrieveResponse.Code != http.StatusOK {
+			t.Fatalf("background retrieval failed: status %d body %s", retrieveResponse.Code, retrieveResponse.Body.String())
+		}
+		if err := json.Unmarshal(retrieveResponse.Body.Bytes(), &backgroundResult); err != nil {
+			t.Fatalf("background retrieval unparseable: %s", retrieveResponse.Body.String())
+		}
+		if backgroundResult.Status != "queued" && backgroundResult.Status != "in_progress" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("background response never completed: %s", retrieveResponse.Body.String())
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if backgroundResult.ID != backgroundCreated.ID || backgroundResult.Status != "completed" || len(backgroundResult.Output) == 0 || backgroundResult.Output[0].Content[0].Text != "ok" {
+		t.Fatalf("background response result wrong: %+v", backgroundResult)
+	}
+	// wait for the background settlement to land
+	time.Sleep(100 * time.Millisecond)
+	quotaAfterBackground, err := model.GetUserQuota(user.Id)
+	if err != nil || quotaAfterBackground >= quotaAfterResponses || responsesUpstreamCalls.Load() != 3 {
+		t.Fatalf("background response did not settle: before %d after %d calls %d err %v", quotaAfterResponses, quotaAfterBackground, responsesUpstreamCalls.Load(), err)
 	}
 	responsesFailureRequest := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(responsesInput+`,"fail":true}`))
 	responsesFailureRequest.Header.Set("Authorization", "Bearer sk-gateway-key")
 	responsesFailureResponse := httptest.NewRecorder()
 	r.ServeHTTP(responsesFailureResponse, responsesFailureRequest)
 	quotaAfterResponsesError, err := model.GetUserQuota(user.Id)
-	if responsesFailureResponse.Code != http.StatusTooManyRequests || !strings.Contains(responsesFailureResponse.Body.String(), `"rate_limit_error"`) || err != nil || quotaAfterResponsesError != quotaAfterResponses {
+	if responsesFailureResponse.Code != http.StatusTooManyRequests || !strings.Contains(responsesFailureResponse.Body.String(), `"rate_limit_error"`) || err != nil || quotaAfterResponsesError != quotaAfterBackground {
 		t.Fatalf("Responses upstream error changed or billed: status %d body %s quota %d err %v", responsesFailureResponse.Code, responsesFailureResponse.Body.String(), quotaAfterResponsesError, err)
+	}
+	cancelUnknown := httptest.NewRequest(http.MethodPost, "/v1/responses/resp_unknown/cancel", nil)
+	cancelUnknown.Header.Set("Authorization", "Bearer sk-gateway-key")
+	cancelUnknownResponse := httptest.NewRecorder()
+	r.ServeHTTP(cancelUnknownResponse, cancelUnknown)
+	if cancelUnknownResponse.Code != http.StatusNotFound {
+		t.Fatalf("unknown background cancel changed: status %d body %s", cancelUnknownResponse.Code, cancelUnknownResponse.Body.String())
 	}
 }
 

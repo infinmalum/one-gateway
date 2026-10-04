@@ -25,6 +25,9 @@ type nativeInput struct {
 	stream                    bool
 	maxOutputTokens           int64
 	fallbackInputTokens       int64
+	fixedQuota                int64
+	fixedPromptTokens         bool
+	responseCharge            func(http.Header, []byte) (int64, int64, error)
 	body                      []byte
 }
 
@@ -45,7 +48,11 @@ func NativeOpenAIResponses(c *gin.Context) {
 		return
 	}
 	if fields.Background {
-		writeNativeError(c, native.OpenAIResponses, http.StatusUnprocessableEntity, errors.New("background Responses require retrieval and cancellation endpoints"))
+		if fields.Stream {
+			writeNativeError(c, native.OpenAIResponses, http.StatusUnprocessableEntity, errors.New("background Responses with streaming are not supported"))
+			return
+		}
+		startBackgroundResponses(c, fields.Model, fields.MaxOutputTokens, body)
 		return
 	}
 	forwardNative(c, nativeInput{protocol: native.OpenAIResponses, model: fields.Model, stream: fields.Stream, maxOutputTokens: fields.MaxOutputTokens, body: body})
@@ -247,7 +254,9 @@ func forwardNative(c *gin.Context, input nativeInput) {
 		FallbackUpstreamProtocols: input.fallbackUpstreamProtocols, Model: input.model, Action: input.action,
 		Version: version, Stream: input.stream, MaxOutputTokens: input.maxOutputTokens,
 		FallbackInputTokens: input.fallbackInputTokens,
-		Body:                input.body, Headers: c.Request.Header, Query: c.Request.URL.Query(),
+		FixedQuota:          input.fixedQuota, FixedPromptTokens: input.fixedPromptTokens,
+		ResponseCharge: input.responseCharge,
+		Body:           input.body, Headers: c.Request.Header, Query: c.Request.URL.Query(),
 		Channel: lifecycle.Channel{
 			ID: metadata.ChannelId, Type: metadata.ChannelType,
 			BaseURL: metadata.BaseURL, APIKey: metadata.APIKey,

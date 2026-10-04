@@ -32,24 +32,24 @@ tests.
 
 | Client endpoint | Current upstream selection | Current behavior and gap |
 | --- | --- | --- |
-| `POST /v1/chat/completions` | Any configured channel with the model in the user's group | OpenAI wire-format channels use native JSON/SSE passthrough with their configured URL and authentication variants. Anthropic channels use an explicit text/user-image/function-tool converter, and Gemini channels an explicit text converter, in both synchronous and streaming forms. Unsupported fields are rejected; provider-specific formats still use legacy converters. OpenAI and Anthropic Go SDK offline fixtures pass. |
-| `POST /v1/responses` | OpenAI channels with the model in the user's group | Native synchronous and SSE create, preserving response items and events; requires an explicit `model`. Background mode and retrieval/cancellation routes remain unsupported. |
-| `POST /v1/messages` | Anthropic channels first; OpenAI channels, then Gemini channels, for the supported conversion subsets | Native request and response forwarding, including SSE, usage, mapping, configured system prompt, and retry before response output. Synchronous and streaming text/user-image/function-tool requests can convert to OpenAI Chat; synchronous and streaming text requests can convert to Gemini. Assistant-side media and other media conversion remain unsupported. |
+| `POST /v1/chat/completions` | Any configured channel with the model in the user's group | OpenAI wire-format channels use native JSON/SSE passthrough with their configured URL and authentication variants. Anthropic channels use an explicit text/user-image/function-tool converter, and Gemini channels an explicit text/function-tool/media converter, in both synchronous and streaming forms. Unsupported fields are rejected; provider-specific formats still use legacy converters. OpenAI and Anthropic Go SDK offline fixtures pass. |
+| `POST /v1/responses` | OpenAI channels with the model in the user's group | Native synchronous and SSE create, preserving response items and events; requires an explicit `model`. Background creates return a queued response object and are executed asynchronously, with retrieval via `GET /v1/responses/{id}` and idempotent cancellation via `POST /v1/responses/{id}/cancel`; background streaming is rejected explicitly. |
+| `POST /v1/messages` | Anthropic channels first; OpenAI channels, then Gemini channels, for the supported conversion subsets | Native request and response forwarding, including SSE, usage, mapping, configured system prompt, and retry before response output. Synchronous and streaming text/user-image/function-tool requests can convert to OpenAI Chat; synchronous and streaming text/thinking/tool/media requests can convert to Gemini. Assistant-side media and other unrepresentable media remain unsupported. |
 | `POST /v1[beta]/models/{model}:generateContent` and `:streamGenerateContent` | Gemini channels with the model in the user's group | Native forwarding on both versions, with retry before response output; no cross-protocol conversion. |
-| Image generation, audio, edits, moderation, and proxy routes | Legacy channel selector and adaptors, except OpenAI Moderations | Registered routes; require separate conformance fixtures before migration. Completions, both Embeddings entrypoints, and Moderations use the native lifecycle for OpenAI channels. |
+| Image generation, audio, edits, moderation, and proxy routes | Native lifecycle on OpenAI-wire channels (edits and moderation reject provider channels); provider adapters for Baidu, Replicate, Zhipu, and Ali images and the provider embeddings formats | Registered routes; provider adapter transport extraction remains. |
 | Files, fine-tuning, assistants, and threads | None | Registered placeholders return not implemented. Gemini File, Live, and Interactions have no routes. |
 
 The remaining legacy route inventory is:
 
 | Endpoint | Current implementation | Migration concern |
 | --- | --- | --- |
-| `POST /v1/completions` | Native lifecycle on OpenAI channels without configured system prompt; legacy controller otherwise | Native JSON/SSE, model mapping, extensions, and usage have offline fixtures. |
-| `POST /v1/edits` | Legacy text controller and `GeneralOpenAIRequest` | Request shape and stream handling need separate fixtures. |
-| `POST /v1/embeddings`, `/v1/engines/{model}/embeddings` | Native lifecycle on OpenAI channels; legacy controller on other channel types | OpenAI batch input, extensions, model mapping, large response usage, errors, and engine path model injection have offline fixtures; other channel types need migration. |
-| `POST /v1/moderations` | Native lifecycle on OpenAI channels; legacy controller on other channel types | OpenAI text and image request preservation, model mapping, `omni-moderation-latest` default, error refund, response preservation, and usage fallback have offline fixtures. Other channel types need migration. |
-| `POST /v1/images/generations` | Legacy image controller | Image-specific quota and provider conversions differ from token billing. |
-| `POST /v1/audio/{speech,transcriptions,translations}` | Legacy audio controller | Multipart and binary bodies require a separate transport and billing path. |
-| `/v1/oneapi/proxy/{channelid}/*target` | Legacy proxy controller | Explicit channel selection and arbitrary target paths need an isolated security review. |
+| `POST /v1/completions` | Native lifecycle on every OpenAI-wire channel type, with a configured system prompt prepended to the prompt; provider channels keep their adapters | Native JSON/SSE, model mapping, extensions, and usage have offline fixtures. |
+| `POST /v1/edits` | Native lifecycle on OpenAI-wire channels; explicit rejection elsewhere | Request shape and stream handling need separate fixtures. |
+| `POST /v1/embeddings`, `/v1/engines/{model}/embeddings` | Native lifecycle on OpenAI-wire channels; provider adapters (Ali, AliBailian, Cloudflare, Gemini, Ollama, Zhipu) on their channel types | OpenAI batch input, extensions, model mapping, large response usage, errors, and engine path model injection have offline fixtures; provider adapters remain until their transport extraction. |
+| `POST /v1/moderations` | Native lifecycle on OpenAI-wire channels; explicit rejection elsewhere | OpenAI text and image request preservation, model mapping, `omni-moderation-latest` default, error refund, response preservation, and usage fallback have offline fixtures. |
+| `POST /v1/images/generations` | Native lifecycle with image-size billing on OpenAI-wire channels; provider adapters (Baidu, Replicate, Zhipu, Ali) on their channel types | Provider image request conversion and async polling remain on the legacy controller until their transport extraction. |
+| `POST /v1/audio/{speech,transcriptions,translations}` | Native lifecycle on OpenAI-wire channels, including Azure deployment URLs and api-key authentication; explicit rejection elsewhere | Multipart bodies pass through untouched; speech bills the input length, transcription and translation bill the transcript token count, matching legacy behavior. |
+| `/v1/oneapi/proxy/{channelid}/*target` | Dedicated unmetered controller; admin-only explicit channel selection, same-scheme same-host targets, and cross-origin redirect refusal | Arbitrary target paths keep an isolated security review. |
 
 Native endpoint tests run against local HTTP upstreams and an in-memory quota
 database. They cover normal and streaming responses, multimodal request fields,
@@ -81,11 +81,15 @@ silently dropped.
   blocks, citations, server tool blocks, text after a `tool_use` block in the
   same message, non-null `stop_sequence` values, provider containers, and
   usage fields the Chat protocol has no slot for.
-- Gemini conversions (Chat and Messages, both directions): tools and
-  `functionCall`/`functionResponse` parts, inline or file media parts, thought
-  parts and thought signatures, grounding and citation parts, multiple
-  candidates, non-zero candidate indexes, and finish reasons other than
-  `STOP` and `MAX_TOKENS`.
+- Gemini conversions (Chat and Messages, both directions) now convert
+  function tools, tool calls and results, tool choice, base64 image and audio
+  input, PDF documents, and thought parts. Still rejected: remote image,
+  audio, and file URIs (the gateway does not fetch media on the client's
+  behalf and `fileData` targets Google Storage URIs), media inside assistant
+  response content, thought signatures attached to display text or function
+  calls, server-side tools such as Google Search and code execution,
+  grounding and citation parts, multiple candidates, non-zero candidate
+  indexes, and finish reasons other than `STOP` and `MAX_TOKENS`.
 - Streaming conversions reject unknown upstream event types and unknown delta
   fields mid-stream. Chat clients then receive a final `data:` error event
   without `[DONE]`; Anthropic clients receive a truncated stream without
@@ -217,13 +221,21 @@ silently dropped.
   representable text subset in both synchronous and streaming forms, keeping
   provider metadata in a named extension and rejecting unsupported content
   before the upstream request.
-- [ ] Convert tools, media, and thinking parts between Gemini and
-  Chat/Messages where they are representable.
+- [x] Convert tools, media, and thinking parts between Gemini and Chat/Messages
+  where they are representable: function tools, tool calls, tool results, and
+  tool choice convert in both directions; base64 images, Chat audio, and
+  Anthropic PDF documents convert to inline data; thought parts convert to
+  Anthropic thinking blocks and back. Gemini cannot fetch remote media URLs,
+  and display text or function calls that carry thought signatures have no
+  Chat/Messages slot, so both fail explicitly.
 - [x] Preserve Gemini-specific tools, thought signatures, grounding, safety
   settings, and usage in the native path. File, Live, and Interactions APIs are
   separate endpoint families with separate acceptance gates.
-- [ ] Gate: verify the native Gemini client and new model IDs with offline
-  conformance tests.
+- [x] Gate: verify the native Gemini client and new model IDs with offline
+  conformance tests. The official Google GenAI Go client passes local native
+  synchronous and streaming fixtures and routes a newly configured model ID
+  without a code change; the official OpenAI and Anthropic clients complete
+  converted tool and thinking round trips against local Gemini fixtures.
 
 ### 5. OpenAI Responses and remaining operations
 
@@ -231,10 +243,28 @@ silently dropped.
   protocol for OpenAI channels, preserving response items and SSE event bytes.
 - [x] Inventory the registered embeddings, image, audio, moderation, and legacy
   provider routes; migrate OpenAI-channel Completions, Embeddings, and Moderations.
-- [ ] Add the remaining Responses operations, including background response
-  retrieval and cancellation, before claiming full API compatibility.
+- [x] Add the remaining Responses operations, including background response
+  retrieval and cancellation, before claiming full API compatibility. A
+  background create validates channel availability, returns the queued response
+  object immediately, executes under the shared lifecycle in a detached task,
+  and stores the final object in memory until the TTL expires. Retrieval serves
+  the recorded response under the gateway-assigned ID to the owning user only;
+  cancellation is idempotent, refunds the reservation for in-flight tasks, and
+  upstream failures surface as a failed status with the provider error.
 - [ ] Port the retained image, audio, edits, proxy, and legacy provider routes;
-  delete unused adapters and the old shared request type.
+  delete unused adapters and the old shared request type. Ported so far: image
+  generation with image-size billing, all three audio operations with legacy
+  billing semantics, edits, completions (with configured system prompts now
+  prepended instead of silently dropped), and both embeddings entrypoints run
+  through the shared lifecycle on every OpenAI-wire channel type; moderations
+  and audio on provider channels fail explicitly because no adapter ever
+  converted them; the proxy route uses a dedicated unmetered controller with
+  same-host target validation; the proxy adapter and the legacy audio and proxy
+  controllers are deleted. Remaining: extracting the provider Chat, image, and
+  embeddings adapters (Ali, AliBailian, Baidu, Cloudflare, Gemini, Ollama,
+  Replicate, Zhipu, and the other provider Chat formats) off Gin and
+  `GeneralOpenAIRequest`, after which the legacy text and image controllers and
+  the old shared request type can be deleted.
 - [ ] Gate: all documented routes pass offline conformance tests and no production
   route uses the legacy relay controller.
 
@@ -302,15 +332,42 @@ forwarding remains the default for same-protocol requests.
   legacy controller. Their Gin-based wire adapters are retained for phase 5
   extraction. Converted HTTP errors now use the client protocol's envelope and
   retain provider code, parameter, and type details.
-- Phase 4: native Gemini routing is in place; client conformance remains. The
-  synchronous and streaming Chat-to-Gemini text subset now uses the shared
-  lifecycle, preserving Gemini response metadata in a named extension and
-  rejecting unsupported content. Messages requests now also convert to Gemini
-  channels for the text subset, in both synchronous and streaming forms, with
-  Gemini usage mapped to Anthropic usage fields. Gemini tool and media
-  conversion, Gemini-to-Messages/Chat as inbound fallbacks, and further
-  cross-protocol converters remain. Phase 5 has a native Responses create
-  route, OpenAI-channel
+- Phase 5: the Responses family is complete. Background creates return the
+  queued response object immediately and execute under the shared lifecycle;
+  `GET /v1/responses/{id}` and `POST /v1/responses/{id}/cancel` cover
+  retrieval and idempotent cancellation, with in-memory retention, owner-only
+  access, reservation refund on cancellation, and upstream failures reported
+  through a failed status. The official OpenAI Go client completes the
+  background create/poll/cancel/failure lifecycle against local fixtures.
+  Edits, image generation (with image-size and quality billing), audio speech
+  (input-length billing), and audio transcription and translation
+  (transcript-token billing) now run through the shared lifecycle on every
+  OpenAI-wire channel type, including Azure deployment URLs and api-key
+  authentication; a configured system prompt is prepended to Completions
+  prompts instead of being silently dropped; provider channels that never had
+  a conversion for these formats receive an explicit rejection. Completions
+  and Embeddings run natively on all OpenAI-wire channels while provider
+  adapters keep serving provider-specific embeddings and image formats. The
+  proxy route uses a dedicated unmetered controller that validates the target
+  stays on the channel's scheme and host, and the proxy adapter plus the
+  legacy audio and proxy controllers are deleted. Remaining phase 5 work: the
+  Gin/`GeneralOpenAIRequest` extraction for the retained provider adapters.
+- Phase 4: native Gemini routing is in place. The synchronous and streaming
+  Chat-to-Gemini and Messages-to-Gemini conversions now cover function tools,
+  tool choice, tool calls and results (with call IDs preserved so clients can
+  round-trip results), base64 image and audio input, Anthropic PDF documents,
+  and thinking blocks: Gemini thought parts convert to Anthropic thinking
+  blocks carrying the thought signature and back. Converted responses map
+  Gemini function calls to Chat tool calls and Messages tool_use blocks with
+  `STOP` finishing as `tool_calls`/`tool_use`. Remote media URLs, media inside
+  assistant responses, thought signatures on display text or function calls,
+  and server-side tools fail explicitly. Gemini response metadata stays in a
+  named extension. The official Google GenAI Go client passes local native
+  synchronous and streaming fixtures and routes a newly configured model ID
+  without a code change; the official OpenAI and Anthropic clients complete
+  converted tool, image, and thinking round trips against local Gemini
+  fixtures. Gemini-to-Messages/Chat as inbound fallbacks remain. Phase 5 has a
+  native Responses create route, OpenAI-channel
   Embeddings routes, and OpenAI-channel legacy Completions route when no forced
   system prompt is configured. OpenAI-channel Moderations now use the same
   lifecycle, preserving text/image inputs and unknown response fields. Large

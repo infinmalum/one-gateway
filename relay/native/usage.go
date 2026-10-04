@@ -101,7 +101,7 @@ func (u *Usage) observe(protocol Protocol, data []byte) {
 			u.Output = max(u.Output, usage.OutputTokens)
 			u.Seen = true
 		}
-	case OpenAIChat, OpenAICompletions:
+	case OpenAIChat, OpenAICompletions, OpenAIEdits:
 		if bytes.Equal(bytes.TrimSpace(data), []byte("[DONE]")) {
 			u.Complete = true
 			return

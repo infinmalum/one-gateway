@@ -8,15 +8,16 @@ import (
 	"github.com/infinmalum/one-gateway/relay/native"
 )
 
-// MessagesToGemini converts the text Messages subset that Gemini
-// GenerateContent can represent. Tools, media, and thinking need separate
-// converters and are rejected before the upstream call. Streaming requests
-// convert their body; the upstream stream action is selected by the transport.
+// MessagesToGemini converts the Messages subset that Gemini GenerateContent
+// can represent: text, function tools and calls, base64 images and PDF
+// documents, and thinking blocks. Unrepresentable fields fail before the
+// upstream call. Streaming requests convert their body; the upstream stream
+// action is selected by the transport.
 func MessagesToGemini(body []byte, model string) ([]byte, error) {
 	if model == "" {
 		return nil, errors.New("model is required")
 	}
-	fields, err := object(body, "model", "messages", "max_tokens", "system", "stream", "temperature", "top_p", "top_k", "stop_sequences")
+	fields, err := object(body, "model", "messages", "max_tokens", "system", "stream", "temperature", "top_p", "top_k", "stop_sequences", "tools", "tool_choice")
 	if err != nil {
 		return nil, err
 	}
@@ -50,6 +51,20 @@ func MessagesToGemini(body []byte, model string) ([]byte, error) {
 		config["stopSequences"] = stops
 	}
 	request := map[string]any{}
+	if len(fields["tools"]) != 0 {
+		tools, err := messagesToolsToGemini(fields["tools"])
+		if err != nil {
+			return nil, err
+		}
+		request["tools"] = tools
+	}
+	if len(fields["tool_choice"]) != 0 {
+		toolConfig, err := messagesToolChoiceToGemini(fields["tool_choice"])
+		if err != nil {
+			return nil, err
+		}
+		request["toolConfig"] = map[string]any{"functionCallingConfig": toolConfig}
+	}
 	if len(fields["system"]) != 0 {
 		text, err := messagesText(fields["system"])
 		if err != nil {
@@ -60,6 +75,7 @@ func MessagesToGemini(body []byte, model string) ([]byte, error) {
 		}
 	}
 	var contents []any
+	toolNames := map[string]string{}
 	for _, raw := range messages {
 		message, err := object(raw, "role", "content")
 		if err != nil {
@@ -69,24 +85,136 @@ func MessagesToGemini(body []byte, model string) ([]byte, error) {
 		if err := json.Unmarshal(message["role"], &role); err != nil || (role != "user" && role != "assistant") {
 			return nil, errors.New("Messages role must be user or assistant")
 		}
-		text, err := messagesText(message["content"])
-		if err != nil || text == "" {
-			return nil, errors.New("Gemini conversion requires text message content")
+		parts, err := messagesBlocksToGemini(message["content"], role == "assistant", toolNames)
+		if err != nil {
+			return nil, err
+		}
+		if len(parts) == 0 {
+			return nil, errors.New("Gemini conversion requires message content")
 		}
 		geminiRole := "user"
 		if role == "assistant" {
 			geminiRole = "model"
 		}
-		contents = append(contents, map[string]any{"role": geminiRole, "parts": []map[string]string{{"text": text}}})
+		appendGeminiContent(&contents, geminiRole, parts)
 	}
 	request["contents"] = contents
 	request["generationConfig"] = config
 	return json.Marshal(request)
 }
 
+func messagesBlocksToGemini(raw json.RawMessage, assistant bool, toolNames map[string]string) ([]map[string]any, error) {
+	var plain string
+	if json.Unmarshal(raw, &plain) == nil {
+		if plain == "" {
+			return nil, errors.New("Gemini conversion requires text message content")
+		}
+		return []map[string]any{{"text": plain}}, nil
+	}
+	var blocks []json.RawMessage
+	if json.Unmarshal(raw, &blocks) != nil || len(blocks) == 0 {
+		return nil, errors.New("Messages content must be text or a non-empty block array")
+	}
+	var parts []map[string]any
+	for _, blockRaw := range blocks {
+		block, err := object(blockRaw, "type", "text", "source", "id", "name", "input", "tool_use_id", "content", "thinking", "signature")
+		if err != nil {
+			return nil, err
+		}
+		var kind string
+		_ = json.Unmarshal(block["type"], &kind)
+		switch kind {
+		case "text":
+			if len(block) != 2 {
+				return nil, errors.New("text block has fields that Gemini cannot represent")
+			}
+			var text string
+			if json.Unmarshal(block["text"], &text) != nil {
+				return nil, errors.New("text block text must be a string")
+			}
+			parts = append(parts, map[string]any{"text": text})
+		case "image":
+			if assistant {
+				return nil, errors.New("assistant messages cannot contain image blocks")
+			}
+			media, err := anthropicMediaToGemini(block["source"], false)
+			if err != nil {
+				return nil, err
+			}
+			parts = append(parts, media)
+		case "document":
+			if assistant {
+				return nil, errors.New("assistant messages cannot contain document blocks")
+			}
+			media, err := anthropicMediaToGemini(block["source"], true)
+			if err != nil {
+				return nil, err
+			}
+			parts = append(parts, media)
+		case "thinking":
+			if !assistant {
+				return nil, errors.New("thinking blocks belong to assistant messages")
+			}
+			var text string
+			if json.Unmarshal(block["thinking"], &text) != nil {
+				return nil, errors.New("thinking block requires thinking text")
+			}
+			thought := map[string]any{"text": text, "thought": true}
+			if signature := rawString(block["signature"]); signature != "" {
+				thought["thoughtSignature"] = signature
+			}
+			parts = append(parts, thought)
+		case "redacted_thinking":
+			return nil, errors.New("redacted thinking cannot be converted to Gemini")
+		case "tool_use":
+			if !assistant || len(block) != 4 {
+				return nil, errors.New("tool_use must be an assistant block with id, name, and input")
+			}
+			var id, name string
+			_ = json.Unmarshal(block["id"], &id)
+			_ = json.Unmarshal(block["name"], &name)
+			var input map[string]any
+			if id == "" || name == "" || json.Unmarshal(block["input"], &input) != nil || input == nil {
+				return nil, errors.New("tool_use requires an object input")
+			}
+			if existing, ok := toolNames[id]; ok && existing != name {
+				return nil, errors.New("tool_use id maps to conflicting function names")
+			}
+			toolNames[id] = name
+			functionCall := map[string]any{"name": name, "args": input, "id": id}
+			parts = append(parts, map[string]any{"functionCall": functionCall})
+		case "tool_result":
+			if assistant || len(block) != 3 {
+				return nil, errors.New("tool_result must be a user block with tool_use_id and content")
+			}
+			var id string
+			_ = json.Unmarshal(block["tool_use_id"], &id)
+			name := toolNames[id]
+			if id == "" || name == "" {
+				return nil, errors.New("tool_result references an unknown tool_use id")
+			}
+			content, err := messagesText(block["content"])
+			if err != nil {
+				return nil, err
+			}
+			response, err := geminiToolResponseObject(content)
+			if err != nil {
+				return nil, err
+			}
+			functionResponse := map[string]any{"id": id, "name": name, "response": response}
+			parts = append(parts, map[string]any{"functionResponse": functionResponse})
+		default:
+			return nil, fmt.Errorf("Messages content block %q cannot be converted", kind)
+		}
+	}
+	return parts, nil
+}
+
 // GeminiToMessages converts one Gemini candidate into an Anthropic message.
-// Provider metadata is kept in a named extension while response content and
-// finish states Messages cannot represent are rejected.
+// Function calls become tool_use blocks and thought parts become thinking
+// blocks carrying the thought signature. Provider metadata is kept in a named
+// extension while response content and finish states Messages cannot
+// represent are rejected.
 func GeminiToMessages(body []byte, requestedModel string) ([]byte, native.Usage, error) {
 	fields, err := object(body, "candidates", "promptFeedback", "usageMetadata", "modelVersion", "responseId", "modelStatus")
 	if err != nil {
@@ -115,15 +243,6 @@ func GeminiToMessages(body []byte, requestedModel string) ([]byte, native.Usage,
 		}
 	}
 	finish := rawString(candidate["finishReason"])
-	stop := ""
-	switch finish {
-	case "STOP":
-		stop = "end_turn"
-	case "MAX_TOKENS":
-		stop = "max_tokens"
-	default:
-		return nil, native.Usage{}, fmt.Errorf("Gemini finish reason %q cannot be converted", finish)
-	}
 	content, err := object(candidate["content"], "role", "parts")
 	if err != nil {
 		return nil, native.Usage{}, err
@@ -133,19 +252,55 @@ func GeminiToMessages(body []byte, requestedModel string) ([]byte, native.Usage,
 	}
 	var rawParts []json.RawMessage
 	if json.Unmarshal(content["parts"], &rawParts) != nil || len(rawParts) == 0 {
-		return nil, native.Usage{}, errors.New("Gemini response requires text parts")
+		return nil, native.Usage{}, errors.New("Gemini response requires content parts")
 	}
-	var text string
+	var blocks []any
+	var toolCalls bool
+	openThinking := -1
+	closeThinking := func() {
+		openThinking = -1
+	}
 	for _, raw := range rawParts {
-		part, err := object(raw, "text")
-		if err != nil || len(part) != 1 {
-			return nil, native.Usage{}, errors.New("Gemini response contains a part Messages cannot represent")
+		part, err := parseGeminiResponsePart(raw)
+		if err != nil {
+			return nil, native.Usage{}, err
 		}
-		var value string
-		if json.Unmarshal(part["text"], &value) != nil {
-			return nil, native.Usage{}, errors.New("Gemini text part must contain text")
+		switch part.kind {
+		case geminiPartText:
+			blocks = append(blocks, map[string]string{"type": "text", "text": part.text})
+			closeThinking()
+		case geminiPartThought:
+			block := map[string]any{"type": "thinking", "thinking": part.text}
+			if part.signature != "" {
+				block["signature"] = part.signature
+			}
+			blocks = append(blocks, block)
+			openThinking = len(blocks) - 1
+		case geminiPartSignature:
+			if openThinking < 0 {
+				return nil, native.Usage{}, errors.New("Gemini thought signature has no preceding thinking block")
+			}
+			blocks[openThinking].(map[string]any)["signature"] = part.signature
+		case geminiPartFunctionCall:
+			toolCalls = true
+			blockID := part.callID
+			if blockID == "" {
+				generated, err := newStreamID("toolu_")
+				if err != nil {
+					return nil, native.Usage{}, err
+				}
+				blockID = generated
+			}
+			blocks = append(blocks, map[string]any{"type": "tool_use", "id": blockID, "name": part.name, "input": json.RawMessage(part.args)})
+			closeThinking()
 		}
-		text += value
+	}
+	if len(blocks) == 0 {
+		return nil, native.Usage{}, errors.New("Gemini response requires content")
+	}
+	stop, err := mapGeminiStopReason(finish, toolCalls)
+	if err != nil {
+		return nil, native.Usage{}, err
 	}
 	prompt, output, cached, err := geminiUsage(fields["usageMetadata"], true)
 	if err != nil {
@@ -165,7 +320,7 @@ func GeminiToMessages(body []byte, requestedModel string) ([]byte, native.Usage,
 	}
 	result := map[string]any{
 		"id": id, "type": "message", "role": "assistant", "model": requestedModel,
-		"content":     []any{map[string]string{"type": "text", "text": text}},
+		"content":     blocks,
 		"stop_reason": stop, "stop_sequence": nil,
 		"usage": map[string]int64{"input_tokens": prompt - cached, "cache_creation_input_tokens": 0, "cache_read_input_tokens": cached, "output_tokens": output},
 	}

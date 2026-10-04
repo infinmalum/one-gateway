@@ -23,6 +23,11 @@ type LoginRequest struct {
 	Password string `json:"password"`
 }
 
+// unchangedPasswordMarker stands in for an unchanged password so the User
+// validator (min=8,max=20) accepts an update that does not touch the
+// password; handlers replace it with "" before persisting.
+const unchangedPasswordMarker = "unchanged-marker"
+
 func Login(c *gin.Context) {
 	if !config.PasswordLoginEnabled {
 		c.JSON(http.StatusOK, gin.H{
@@ -376,7 +381,7 @@ func UpdateUser(c *gin.Context) {
 		return
 	}
 	if updatedUser.Password == "" {
-		updatedUser.Password = "$I_LOVE_U" // make Validator happy :)
+		updatedUser.Password = unchangedPasswordMarker
 	}
 	if err := common.Validate.Struct(&updatedUser); err != nil {
 		c.JSON(http.StatusOK, gin.H{
@@ -408,7 +413,7 @@ func UpdateUser(c *gin.Context) {
 		})
 		return
 	}
-	if updatedUser.Password == "$I_LOVE_U" {
+	if updatedUser.Password == unchangedPasswordMarker {
 		updatedUser.Password = "" // rollback to what it should be
 	}
 	updatePassword := updatedUser.Password != ""
@@ -440,7 +445,7 @@ func UpdateSelf(c *gin.Context) {
 		return
 	}
 	if user.Password == "" {
-		user.Password = "$I_LOVE_U" // make Validator happy :)
+		user.Password = unchangedPasswordMarker
 	}
 	if err := common.Validate.Struct(&user); err != nil {
 		c.JSON(http.StatusOK, gin.H{
@@ -456,7 +461,7 @@ func UpdateSelf(c *gin.Context) {
 		Password:    user.Password,
 		DisplayName: user.DisplayName,
 	}
-	if user.Password == "$I_LOVE_U" {
+	if user.Password == unchangedPasswordMarker {
 		user.Password = "" // rollback to what it should be
 		cleanUser.Password = ""
 	}

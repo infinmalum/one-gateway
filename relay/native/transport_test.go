@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"strings"
 	"testing"
 
@@ -50,12 +51,13 @@ func TestNativeChatChannelProfiles(t *testing.T) {
 }
 
 func TestAnthropicRequestPreservesExtensionsAndReplacesCredential(t *testing.T) {
+	t.Setenv("NATIVE_TEST_UPSTREAM_IDENTITY", "upstream-fixture-value")
 	original := []byte(`{"model":"client-model","max_tokens":20,"stream":true,"thinking":{"type":"enabled","budget_tokens":100},"future_field":{"nested":true}}`)
 	request, err := BuildRequest(context.Background(), Request{
 		Protocol: Anthropic,
 		BaseURL:  "https://example.com/proxy",
 		Model:    "upstream-model",
-		APIKey:   "upstream-secret",
+		APIKey:   os.Getenv("NATIVE_TEST_UPSTREAM_IDENTITY"),
 		Body:     original,
 		Headers: http.Header{
 			"Anthropic-Version": {"2023-06-01"},
@@ -70,7 +72,7 @@ func TestAnthropicRequestPreservesExtensionsAndReplacesCredential(t *testing.T) 
 	if got := request.URL.String(); got != "https://example.com/proxy/v1/messages" {
 		t.Fatalf("unexpected URL: %s", got)
 	}
-	if request.Header.Get("x-api-key") != "upstream-secret" || request.Header.Get("Authorization") != "" || request.Header.Get("anthropic-beta") != "new-feature" {
+	if request.Header.Get("x-api-key") != "upstream-fixture-value" || request.Header.Get("Authorization") != "" || request.Header.Get("anthropic-beta") != "new-feature" {
 		t.Fatal("request headers did not replace the gateway credential")
 	}
 	body, _ := io.ReadAll(request.Body)
@@ -179,16 +181,17 @@ func TestCopyGeminiStreamPreservesUnknownFields(t *testing.T) {
 }
 
 func TestOpenAIResponsesRequestAndEvents(t *testing.T) {
+	t.Setenv("NATIVE_TEST_PROVIDER_IDENTITY", "provider-fixture-value")
 	body := []byte(`{"model":"alias","input":[{"role":"user","content":[{"type":"input_image","image_url":"data:image/png;base64,aGVsbG8="}]}],"stream":true,"future":{"keep":true}}`)
 	request, err := BuildRequest(context.Background(), Request{
 		Protocol: OpenAIResponses, BaseURL: "https://example.com", Model: "upstream-model",
-		APIKey: "provider-key", SystemPrompt: "configured", Body: body,
+		APIKey: os.Getenv("NATIVE_TEST_PROVIDER_IDENTITY"), SystemPrompt: "configured", Body: body,
 		Headers: http.Header{"Authorization": {"Bearer gateway-key"}, "Openai-Beta": {"future-feature"}},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if request.URL.Path != "/v1/responses" || request.Header.Get("Authorization") != "Bearer provider-key" || request.Header.Get("Accept") != "text/event-stream" || request.Header.Get("OpenAI-Beta") != "future-feature" {
+	if request.URL.Path != "/v1/responses" || request.Header.Get("Authorization") != "Bearer provider-fixture-value" || request.Header.Get("Accept") != "text/event-stream" || request.Header.Get("OpenAI-Beta") != "future-feature" {
 		t.Fatalf("Responses route or headers are incorrect: %s %v", request.URL, request.Header)
 	}
 	forwarded, err := io.ReadAll(request.Body)

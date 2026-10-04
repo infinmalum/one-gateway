@@ -111,6 +111,94 @@ func anthropicImageToChat(raw json.RawMessage) (map[string]any, error) {
 	return map[string]any{"type": "image_url", "image_url": map[string]string{"url": address}}, nil
 }
 
+// geminiInlineData builds a Gemini inline data part from base64 media.
+func geminiInlineData(mimeType, data string) map[string]any {
+	return map[string]any{"inlineData": map[string]string{"mimeType": mimeType, "data": data}}
+}
+
+// chatImageToGemini converts a Chat image_url part into a Gemini inline data
+// part. Gemini cannot fetch arbitrary remote URLs and the gateway must not
+// fetch on the client's behalf, so only base64 data URLs convert.
+func chatImageToGemini(raw json.RawMessage) (map[string]any, error) {
+	image, err := object(raw, "url", "detail")
+	if err != nil {
+		return nil, err
+	}
+	if len(image["detail"]) != 0 {
+		return nil, errors.New("Chat image detail cannot be converted")
+	}
+	var address string
+	if json.Unmarshal(image["url"], &address) != nil {
+		return nil, errors.New("Chat image_url requires a URL")
+	}
+	if !strings.HasPrefix(address, "data:") {
+		return nil, errors.New("Gemini conversion requires base64 image data; remote image URLs cannot be fetched")
+	}
+	mediaType, data, err := parseImageDataURL(address)
+	if err != nil {
+		return nil, err
+	}
+	return geminiInlineData(mediaType, data), nil
+}
+
+// chatAudioToGemini converts a Chat input_audio part into a Gemini inline
+// data part.
+func chatAudioToGemini(raw json.RawMessage) (map[string]any, error) {
+	audio, err := object(raw, "data", "format")
+	if err != nil {
+		return nil, err
+	}
+	var data, format string
+	if len(audio) != 2 || json.Unmarshal(audio["data"], &data) != nil || json.Unmarshal(audio["format"], &format) != nil || data == "" {
+		return nil, errors.New("Chat input_audio requires base64 data and a format")
+	}
+	var mimeType string
+	switch format {
+	case "wav":
+		mimeType = "audio/wav"
+	case "mp3":
+		mimeType = "audio/mpeg"
+	default:
+		return nil, fmt.Errorf("Chat audio format %q cannot be converted", format)
+	}
+	if _, err := base64.StdEncoding.DecodeString(data); err != nil {
+		return nil, errors.New("Chat audio data must be base64")
+	}
+	return geminiInlineData(mimeType, data), nil
+}
+
+// anthropicMediaToGemini converts an Anthropic image or document source into
+// a Gemini inline data part. PDF documents convert alongside images; remote
+// sources cannot be fetched.
+func anthropicMediaToGemini(raw json.RawMessage, document bool) (map[string]any, error) {
+	source, err := object(raw, "type", "media_type", "data", "url")
+	if err != nil {
+		return nil, err
+	}
+	var kind string
+	_ = json.Unmarshal(source["type"], &kind)
+	switch kind {
+	case "base64":
+		var mediaType, data string
+		if len(source) != 3 || json.Unmarshal(source["media_type"], &mediaType) != nil || json.Unmarshal(source["data"], &data) != nil || data == "" {
+			return nil, errors.New("Anthropic base64 media requires a media type and data")
+		}
+		if document {
+			if mediaType != "application/pdf" {
+				return nil, fmt.Errorf("Anthropic document media type %q cannot be converted", mediaType)
+			}
+		} else if !supportedImageType(mediaType) {
+			return nil, fmt.Errorf("Anthropic image media type %q cannot be converted", mediaType)
+		}
+		if _, err := base64.StdEncoding.DecodeString(data); err != nil {
+			return nil, errors.New("Anthropic media data must be base64")
+		}
+		return geminiInlineData(mediaType, data), nil
+	default:
+		return nil, errors.New("Gemini conversion requires base64 media; remote sources cannot be fetched")
+	}
+}
+
 func parseImageDataURL(address string) (string, string, error) {
 	meta, data, ok := strings.Cut(strings.TrimPrefix(address, "data:"), ",")
 	mediaType, encoding, hasEncoding := strings.Cut(meta, ";")
