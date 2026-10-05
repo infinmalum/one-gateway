@@ -101,7 +101,11 @@ const LoginForm = () => {
         <Card
           fluid
           className='chart-card'
-          style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.12)' }}
+          style={{
+            boxShadow: '0 8px 24px rgba(33, 136, 208, 0.10)',
+            borderRadius: 16,
+            padding: '1em 0.5em',
+          }}
         >
           <Card.Content>
             <Card.Header>
@@ -110,7 +114,15 @@ const LoginForm = () => {
                 textAlign='center'
                 style={{ marginBottom: '1.5em' }}
               >
-                <Image src={logo} style={{ marginBottom: '10px' }} />
+                <Image
+                  src={logo}
+                  style={{
+                    width: '64px',
+                    height: '64px',
+                    objectFit: 'contain',
+                    margin: '0 auto 10px',
+                  }}
+                />
                 <Header.Content>{t('auth.login.title')}</Header.Content>
               </Header>
             </Card.Header>
@@ -140,8 +152,9 @@ const LoginForm = () => {
                 fluid
                 size='large'
                 style={{
-                  background: '#2F73FF', // 使用更现代的蓝色
+                  background: '#2185d0',
                   color: 'white',
+                  borderRadius: 8,
                   marginBottom: '1.5em',
                 }}
                 onClick={handleSubmit}
@@ -220,8 +233,8 @@ const LoginForm = () => {
                   {status.lark_client_id && (
                     <div
                       style={{
-                        background:
-                          'radial-gradient(circle, #FFFFFF, #FFFFFF, #FFFFFF, #FFFFFF, #FFFFFF)',
+                        background: '#FFFFFF',
+                        border: '1px solid rgba(0,0,0,0.08)',
                         width: '36px',
                         height: '36px',
                         borderRadius: '10em',
@@ -271,8 +284,9 @@ const LoginForm = () => {
                   fluid
                   size='large'
                   style={{
-                    background: '#2F73FF',
+                    background: '#2185d0',
                     color: 'white',
+                    borderRadius: 8,
                     marginBottom: '1.5em',
                   }}
                   onClick={onSubmitWeChatVerificationCode}

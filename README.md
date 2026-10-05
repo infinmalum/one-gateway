@@ -1,18 +1,33 @@
-# One Gateway
+<div align="center">
+  <img src="docs/logo.png" alt="One Gateway logo" width="120" />
 
-English · [简体中文](README.zh-CN.md) · [日本語](README.ja.md)
+  # One Gateway
 
-One Gateway is a community fork of [One API](https://github.com/songquanpeng/one-api). It provides one OpenAI-compatible endpoint for multiple model providers, with a web console for channels, users, tokens, quotas, and usage logs. The upstream project is created and maintained by JustSong and its contributors; this fork builds on their work.
+  **One OpenAI-compatible endpoint for every model provider.**
 
+  [![CI](https://github.com/infinmalum/one-gateway/actions/workflows/ci.yml/badge.svg)](https://github.com/infinmalum/one-gateway/actions/workflows/ci.yml)
+  [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+  ![Go](https://img.shields.io/badge/Go-1.27-00ADD8?logo=go&logoColor=white)
+  ![Node.js](https://img.shields.io/badge/Node.js-24-339933?logo=nodedotjs&logoColor=white)
+
+  English · [简体中文](README.zh-CN.md) · [日本語](README.ja.md)
+</div>
+
+---
+
+One Gateway is a community fork of [One API](https://github.com/songquanpeng/one-api). It fronts many model providers with a single OpenAI-compatible API and ships a web console for channels, users, tokens, quotas, and usage logs. The upstream project is created and maintained by JustSong and its contributors; this fork builds on their work.
+
+> [!NOTE]
 > This repository is a separate fork. Upstream releases, Docker images, demo sites, and issue trackers are not releases or support channels for One Gateway.
 
-## What it includes
+## Highlights
 
-- A unified `/v1` API and configurable provider channels, model mappings, group rates, and automatic retries.
-- Streaming requests, channel load balancing, quota tracking, usage logs, access tokens, and redemption codes.
-- A web console with three themes: `default`, `air`, and `berry`.
-- SQLite for a single instance, or MySQL/PostgreSQL for shared storage. Redis can be used with the cache and synchronization settings.
-- TypeScript frontends built with Vite and a Go backend. Each frontend build runs its type check first.
+- 🌉 **One endpoint, many providers** — a unified `/v1` API for chat, completions, embeddings, images, audio, and background Responses.
+- 🔀 **Smart routing** — channel load balancing, model mappings, group rates, and automatic retries before the first byte reaches the client.
+- 🧮 **Quota and billing** — per-token quotas, usage logs, redemption codes, and rate-based settlement for every request.
+- 🖥️ **Web console** — manage channels, users, tokens, and logs in one place.
+- 💾 **Flexible storage** — SQLite out of the box; MySQL or PostgreSQL for shared storage; Redis for caching and synchronization.
+- 🛠️ **Modern stack** — a Go backend with TypeScript and Vite frontends; every frontend build runs its type check first.
 
 Provider and model support varies by channel implementation. Check the channel settings and test a model before relying on it in production.
 
@@ -33,20 +48,16 @@ The checked-in `docker-compose.yml` builds this fork locally and tags the image 
 
 ## Build from source
 
-The Dockerfile uses Node.js 24 and Go 1.27.1. Install compatible versions, then build all three frontend themes before compiling the Go binary, which embeds `web/build`:
+The Dockerfile uses Node.js 24 and Go 1.27.1. Install compatible versions, then build the frontend before compiling the Go binary, which embeds `web/build`:
 
 ```sh
 npm ci --legacy-peer-deps --prefix web/default
-npm ci --legacy-peer-deps --prefix web/air
-npm ci --legacy-peer-deps --prefix web/berry
 npm run build --prefix web/default
-npm run build --prefix web/air
-npm run build --prefix web/berry
 go build -o one-gateway .
 ./one-gateway --port 3000
 ```
 
-Downloaded npm and Go modules use their normal persistent caches. The frontend dependencies also live in each theme's `node_modules`; compiled assets go to `web/build/<theme>`.
+Downloaded npm and Go modules use their normal persistent caches. The frontend dependencies also live in `web/default/node_modules`; compiled assets go to `web/build/default`.
 
 ## Configure and use
 
@@ -55,7 +66,6 @@ Set environment variables before starting the server. Common settings are:
 | Variable | Purpose |
 | --- | --- |
 | `PORT` | HTTP listening port; default `3000`. |
-| `THEME` | `default`, `air`, or `berry`; default `default`. |
 | `SQL_DSN` | MySQL DSN or `postgres://` URL. If unset, the server uses SQLite. |
 | `SQLITE_PATH` | SQLite database path when using SQLite. |
 | `SESSION_SECRET` | Stable secret for sessions, especially across restarts or replicas. |
@@ -66,20 +76,27 @@ Set environment variables before starting the server. Common settings are:
 
 For multiple instances, point every node at the same MySQL or PostgreSQL database, use the same `SESSION_SECRET`, and configure node roles and cache synchronization. The source of truth for supported settings is [`common/config`](common/config) and the existing environment-variable section in the upstream project's documentation.
 
-After signing in, add a provider key on **Channels**, then create an access token on **Tokens**. Point an OpenAI-compatible client at `http://localhost:3000/v1` and use that token as its API key. For example:
+After signing in, add a provider key on **Channels**, then create an access token on **Tokens**. Point any OpenAI-compatible client at `http://localhost:3000/v1` and use that token as its API key:
 
 ```sh
-curl http://localhost:3000/v1/models -H 'Authorization: Bearer YOUR_TOKEN'
+curl http://localhost:3000/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer YOUR_TOKEN' \
+  -d '{"model": "gpt-4o", "messages": [{"role": "user", "content": "Hello!"}]}'
 ```
 
-The [management API reference](docs/API.md) documents additional endpoints. Available models depend on the channels you configure.
+## Documentation
+
+- [Management API reference](docs/API.md)
+- [Relay architecture notes](docs/relay-rewrite-plan.md)
+- [Frontend theme notes](web/README.md)
+- [TypeScript migration notes](docs/typescript-migration.md)
 
 ## Development
 
-- Run `npm run typecheck --prefix web/default`, `web/air`, or `web/berry` while editing a theme.
-- Run `npm run build --prefix web/default`, `web/air`, and `web/berry` before changing embedded assets.
+- Run `npm run typecheck --prefix web/default` while editing the frontend.
+- Run `npm run build --prefix web/default` before changing embedded assets.
 - Run `go test ./...` for backend changes.
-- See [frontend theme notes](web/README.md) and [TypeScript migration notes](docs/typescript-migration.md).
 
 Report fork-specific bugs and changes in [this repository's issues](https://github.com/infinmalum/one-gateway/issues). Please check whether a behavior also exists in the upstream project before filing it here.
 

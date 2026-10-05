@@ -5,12 +5,8 @@ COPY ./VERSION .
 COPY ./web .
 
 RUN npm ci --legacy-peer-deps --prefix /web/default
-RUN npm ci --legacy-peer-deps --prefix /web/berry
-RUN npm ci --legacy-peer-deps --prefix /web/air
 
 RUN REACT_APP_VERSION=$(cat ./VERSION) npm run build --prefix /web/default
-RUN REACT_APP_VERSION=$(cat ./VERSION) npm run build --prefix /web/berry
-RUN REACT_APP_VERSION=$(cat ./VERSION) npm run build --prefix /web/air
 
 FROM golang:1.27.1-alpine AS builder2
 

@@ -626,7 +626,7 @@
         },
         "completion": {
           "title": "Completion Ratio",
-          "placeholder": "A JSON text where keys are model names and values are ratios. These ratios are the proportion of completion to prompt ratio, which can override One API's internal ratios"
+          "placeholder": "A JSON text where keys are model names and values are ratios. These ratios are the proportion of completion to prompt ratio, which can override the gateway's internal ratios"
         },
         "group": {
           "title": "Group Ratio",
@@ -735,8 +735,8 @@
   },
   "home": {
     "welcome": {
-      "title": "Welcome to One API",
-      "description": "One API is a LLM API management and distribution system that helps you better manage and use LLM APIs from various providers.",
+      "title": "Welcome to One Gateway",
+      "description": "One Gateway is a LLM API management and distribution system that helps you better manage and use LLM APIs from various providers.",
       "login_notice": "To use the service, please login or register first."
     },
     "system_status": {
@@ -806,7 +806,7 @@
   },
   "about": {
     "title": "About",
-    "description": "One API is an open-source API management and proxy platform.",
+    "description": "One Gateway is an open-source API management and proxy platform.",
     "repository": "Repository: ",
     "loading_failed": "Loading failed"
   },

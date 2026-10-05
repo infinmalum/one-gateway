@@ -20,7 +20,7 @@ import './Dashboard.css';
 const chartConfig = {
   lineChart: {
     style: {
-      background: '#fff',
+      background: 'transparent',
       borderRadius: '8px',
     },
     line: {
@@ -35,21 +35,21 @@ const chartConfig = {
     },
   },
   colors: {
-    requests: '#4318FF',
-    quota: '#00B5D8',
-    tokens: '#6C63FF',
+    requests: '#2185d0',
+    quota: '#00b5d8',
+    tokens: '#a333c8',
   },
   barColors: [
-    '#4318FF', // 深紫色
-    '#00B5D8', // 青色
-    '#6C63FF', // 紫色
-    '#05CD99', // 绿色
-    '#FFB547', // 橙色
-    '#FF5E7D', // 粉色
-    '#41B883', // 翠绿
-    '#7983FF', // 淡紫
-    '#FF8F6B', // 珊瑚色
-    '#49BEFF', // 天蓝
+    '#2185d0', // 蓝
+    '#00b5d8', // 青
+    '#a333c8', // 紫
+    '#21ba45', // 绿
+    '#f2711c', // 橙
+    '#e0397e', // 粉
+    '#6435c9', // 深紫
+    '#00847a', // 翠绿
+    '#ffb547', // 暖橙
+    '#16ab39', // 深绿
   ],
 };
 
