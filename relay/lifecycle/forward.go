@@ -52,13 +52,21 @@ type Request struct {
 	// FallbackInputTokens is used by operations whose successful response may
 	// omit usage, such as Moderations. A provider usage report takes precedence.
 	FallbackInputTokens int64
-	Body                []byte
-	Headers             http.Header
-	Query               url.Values
-	Channel             Channel
-	Principal           Principal
-	RetryLimit          int
-	HTTPClient          *http.Client
+	// FixedQuota charges an operation-specific amount, such as image size
+	// pricing or audio input length, instead of settling from provider token
+	// usage. ResponseCharge optionally derives the final charge from the
+	// buffered response; FixedPromptTokens reports the charged amount as the
+	// consume log's PromptTokens, matching the legacy audio behavior.
+	FixedQuota        int64
+	FixedPromptTokens bool
+	ResponseCharge    func(header http.Header, body []byte) (charge int64, promptTokens int64, err error)
+	Body              []byte
+	Headers           http.Header
+	Query             url.Values
+	Channel           Channel
+	Principal         Principal
+	RetryLimit        int
+	HTTPClient        *http.Client
 }
 
 type HTTPError struct {
@@ -184,12 +192,7 @@ func Forward(ctx context.Context, dst http.ResponseWriter, input Request) *HTTPE
 		if err != nil {
 			return &HTTPError{Status: http.StatusBadRequest, Message: err.Error()}
 		}
-		reservation, err := billing.ReserveNativeQuota(ctx, billing.NativeReservation{
-			UserID: input.Principal.UserID, TokenID: input.Principal.TokenID,
-			ChannelID: channel.ID, ChannelType: channel.Type,
-			TokenName: input.Principal.TokenName, ModelName: mappedModel,
-			Group: input.Principal.Group, SystemPromptReset: channel.SystemPrompt != "" && supportsSystemPrompt(upstreamProtocol),
-		}, input.MaxOutputTokens)
+		reservation, err := reserve(ctx, input, channel, mappedModel, upstreamProtocol)
 		if err != nil {
 			return &HTTPError{Status: http.StatusForbidden, Message: err.Error()}
 		}
@@ -231,6 +234,9 @@ func Forward(ctx context.Context, dst http.ResponseWriter, input Request) *HTTPE
 			reservation.Refund(settlementContext)
 			_ = response.Body.Close()
 			return &HTTPError{Status: http.StatusBadGateway, Message: "upstream did not return an event stream"}
+		}
+		if input.FixedQuota > 0 {
+			return settleFixedQuota(ctx, settlementContext, dst, response, input, reservation, channel)
 		}
 		if streamConverter != nil {
 			copyHeaders(dst.Header(), response.Header)
@@ -289,11 +295,83 @@ func Forward(ctx context.Context, dst http.ResponseWriter, input Request) *HTTPE
 
 func supportsSystemPrompt(protocol native.Protocol) bool {
 	switch protocol {
-	case native.Anthropic, native.Gemini, native.OpenAIChat, native.OpenAIResponses:
+	case native.Anthropic, native.Gemini, native.OpenAIChat, native.OpenAIResponses, native.OpenAICompletions:
 		return true
 	default:
 		return false
 	}
+}
+
+// reserve creates the per-attempt reservation: an exact operation charge for
+// fixed-quota operations, or the output-limit estimate for token billing.
+func reserve(ctx context.Context, input Request, channel Channel, mappedModel string, upstreamProtocol native.Protocol) (*billing.NativeReservation, error) {
+	payload := billing.NativeReservation{
+		UserID: input.Principal.UserID, TokenID: input.Principal.TokenID,
+		ChannelID: channel.ID, ChannelType: channel.Type,
+		TokenName: input.Principal.TokenName, ModelName: mappedModel,
+		Group: input.Principal.Group, SystemPromptReset: channel.SystemPrompt != "" && supportsSystemPrompt(upstreamProtocol),
+	}
+	if input.FixedQuota > 0 {
+		return billing.ReserveFixedQuota(ctx, payload, input.FixedQuota)
+	}
+	return billing.ReserveNativeQuota(ctx, payload, input.MaxOutputTokens)
+}
+
+// settleFixedQuota streams a fixed-charge response to the client and charges
+// the operation amount: the buffered charge when ResponseCharge derives one
+// from the response body, otherwise the reserved amount exactly.
+func settleFixedQuota(requestCtx, settlementCtx context.Context, dst http.ResponseWriter,
+	response *http.Response, input Request, reservation *billing.NativeReservation, channel Channel,
+) *HTTPError {
+	charge := input.FixedQuota
+	promptTokens := int64(0)
+	if input.ResponseCharge != nil {
+		const maxChargedResponse = 64 << 20
+		payload, readErr := io.ReadAll(io.LimitReader(response.Body, maxChargedResponse))
+		_ = response.Body.Close()
+		if readErr != nil || len(payload) >= maxChargedResponse {
+			reservation.Refund(settlementCtx)
+			logger.Errorf(settlementCtx, "fixed-quota response could not be read on channel %d: %v", channel.ID, readErr)
+			return &HTTPError{Status: http.StatusBadGateway, Message: "upstream response could not be read"}
+		}
+		derived, tokens, chargeErr := input.ResponseCharge(response.Header, payload)
+		if chargeErr != nil {
+			reservation.Refund(settlementCtx)
+			logger.Errorf(settlementCtx, "fixed-quota response charge failed on channel %d: %v", channel.ID, chargeErr)
+			return &HTTPError{Status: http.StatusBadGateway, Message: chargeErr.Error()}
+		}
+		if derived >= 0 {
+			charge, promptTokens = derived, tokens
+		}
+		copyHeaders(dst.Header(), response.Header)
+		dst.WriteHeader(response.StatusCode)
+		_, writeErr := dst.Write(payload)
+		interrupted := writeErr != nil || requestCtx.Err() != nil
+		if interrupted {
+			charge = max(charge, input.FixedQuota)
+			if input.FixedPromptTokens {
+				promptTokens = charge
+			}
+		}
+		reservation.SettleDirect(settlementCtx, charge, promptTokens, interrupted)
+		if writeErr != nil {
+			logger.Errorf(settlementCtx, "fixed-quota response interrupted on channel %d: %v", channel.ID, writeErr)
+		}
+		return nil
+	}
+	copyHeaders(dst.Header(), response.Header)
+	dst.WriteHeader(response.StatusCode)
+	_, copyErr := io.Copy(dst, response.Body)
+	_ = response.Body.Close()
+	interrupted := copyErr != nil || requestCtx.Err() != nil
+	if input.FixedPromptTokens {
+		promptTokens = charge
+	}
+	reservation.SettleDirect(settlementCtx, charge, promptTokens, interrupted)
+	if copyErr != nil {
+		logger.Errorf(settlementCtx, "fixed-quota response interrupted on channel %d: %v", channel.ID, copyErr)
+	}
+	return nil
 }
 
 // flushingWriter lets bridge converters stream increments through the Response
@@ -310,6 +388,26 @@ func (f flushingWriter) Flush() {
 	if flusher, ok := f.writer.(http.Flusher); ok {
 		flusher.Flush()
 	}
+}
+
+// SelectForRequest resolves and validates the initial channel for a request
+// without executing it. Deferred executions such as background Responses use
+// it to fail on channel problems before returning to the client.
+func SelectForRequest(input Request, upstreamProtocol native.Protocol) (Channel, *HTTPError) {
+	if input.UpstreamProtocol != "" {
+		upstreamProtocol = input.UpstreamProtocol
+	}
+	if input.Channel.ID != 0 {
+		return input.Channel, nil
+	}
+	if input.Principal.Group == "" {
+		group, err := model.CacheGetUserGroup(input.Principal.UserID)
+		if err != nil {
+			return Channel{}, &HTTPError{Status: http.StatusInternalServerError, Message: "failed to load user group"}
+		}
+		input.Principal.Group = group
+	}
+	return selectInitial(input, upstreamProtocol)
 }
 
 func selectInitial(input Request, upstreamProtocol native.Protocol) (Channel, *HTTPError) {
@@ -352,7 +450,8 @@ func requiredChannelType(protocol native.Protocol) int {
 		return channeltype.Anthropic
 	case native.Gemini:
 		return channeltype.Gemini
-	case native.OpenAIChat, native.OpenAICompletions, native.OpenAIEmbeddings, native.OpenAIModerations, native.OpenAIResponses:
+	case native.OpenAIChat, native.OpenAICompletions, native.OpenAIEmbeddings, native.OpenAIModerations, native.OpenAIResponses,
+		native.OpenAIEdits, native.OpenAIImages, native.OpenAIAudioSpeech, native.OpenAIAudioTranscriptions, native.OpenAIAudioTranslations:
 		return channeltype.OpenAI
 	default:
 		return -1
@@ -360,7 +459,11 @@ func requiredChannelType(protocol native.Protocol) int {
 }
 
 func channelSupportsProtocol(kind int, protocol native.Protocol) bool {
-	if protocol == native.OpenAIChat {
+	switch protocol {
+	// The OpenAI wire protocols run on every channel type that speaks the
+	// OpenAI JSON format, including Azure deployment URLs.
+	case native.OpenAIChat, native.OpenAICompletions, native.OpenAIEmbeddings, native.OpenAIModerations,
+		native.OpenAIEdits, native.OpenAIImages, native.OpenAIAudioSpeech, native.OpenAIAudioTranscriptions, native.OpenAIAudioTranslations:
 		return channeltype.NativeChatCompatible(kind)
 	}
 	return kind == requiredChannelType(protocol)

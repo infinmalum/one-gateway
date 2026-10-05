@@ -3,8 +3,8 @@ package auth
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 
@@ -22,11 +22,40 @@ type wechatLoginResponse struct {
 	Data    string `json:"data"`
 }
 
+// weChatCodeAllowlist re-derives the code from validated characters only, so
+// nothing carrying URL structure can reach the upstream request. WeChat OAuth
+// codes are opaque ASCII identifiers; any other byte is invalid anyway.
+func weChatCodeAllowlist(code string) (string, bool) {
+	if len(code) == 0 || len(code) > 128 {
+		return "", false
+	}
+	cleaned := make([]byte, 0, len(code))
+	for i := 0; i < len(code); i++ {
+		c := code[i]
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9', c == '-', c == '_':
+			cleaned = append(cleaned, c)
+		default:
+			return "", false
+		}
+	}
+	return string(cleaned), true
+}
+
 func getWeChatIdByCode(code string) (string, error) {
-	if code == "" {
+	code, ok := weChatCodeAllowlist(code)
+	if !ok {
 		return "", errors.New("无效的参数")
 	}
-	req, err := http.NewRequest("GET", fmt.Sprintf("%s/api/wechat/user?code=%s", config.WeChatServerAddress, code), nil)
+	endpoint, perr := url.Parse(config.WeChatServerAddress)
+	if perr != nil || (endpoint.Scheme != "http" && endpoint.Scheme != "https") || endpoint.Host == "" {
+		return "", errors.New("微信服务器地址未正确配置")
+	}
+	endpoint.Path += "/api/wechat/user"
+	query := endpoint.Query()
+	query.Set("code", code)
+	endpoint.RawQuery = query.Encode()
+	req, err := http.NewRequest(http.MethodGet, endpoint.String(), nil)
 	if err != nil {
 		return "", err
 	}

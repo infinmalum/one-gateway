@@ -170,9 +170,12 @@ func mapChatFinishReason(reason string) (string, error) {
 	}
 }
 
-func mapGeminiFinishReason(reason string) (string, error) {
+func mapGeminiFinishReason(reason string, toolCalls bool) (string, error) {
 	switch reason {
 	case "STOP":
+		if toolCalls {
+			return "tool_calls", nil
+		}
 		return "stop", nil
 	case "MAX_TOKENS":
 		return "length", nil
@@ -181,9 +184,12 @@ func mapGeminiFinishReason(reason string) (string, error) {
 	}
 }
 
-func mapGeminiStopReason(reason string) (string, error) {
+func mapGeminiStopReason(reason string, toolCalls bool) (string, error) {
 	switch reason {
 	case "STOP":
+		if toolCalls {
+			return "tool_use", nil
+		}
 		return "end_turn", nil
 	case "MAX_TOKENS":
 		return "max_tokens", nil

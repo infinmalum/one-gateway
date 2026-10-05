@@ -1,6 +1,7 @@
 package model
 
 import (
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -8,9 +9,11 @@ import (
 
 func TestUserListingDoesNotExposeManagementTokens(t *testing.T) {
 	db := setupQuotaTest(t)
+	t.Setenv("USER_LISTING_CANARY", "listing-canary-1")
+	canary := os.Getenv("USER_LISTING_CANARY")
 	require.NoError(t, db.Model(&User{}).Where("id = ?", 1).Updates(map[string]any{
-		"access_token": "secret-management-token",
-		"password":     "secret-password",
+		"access_token": canary,
+		"password":     canary,
 	}).Error)
 
 	users, err := GetAllUsers(0, 10, "")

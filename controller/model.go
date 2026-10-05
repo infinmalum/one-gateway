@@ -64,10 +64,14 @@ func init() {
 	})
 	// https://platform.openai.com/docs/models/model-endpoint-compatibility
 	for i := 0; i < apitype.Dummy; i++ {
-		if i == apitype.AIProxyLibrary {
+		if i == apitype.AIProxyLibrary || i == apitype.Proxy {
+			// AIProxyLibrary lists no models; proxy requests carry no model.
 			continue
 		}
 		adaptor := relay.GetAdaptor(i)
+		if adaptor == nil {
+			continue
+		}
 		channelName := adaptor.GetChannelName()
 		modelNames := adaptor.GetModelList()
 		for _, modelName := range modelNames {
@@ -106,6 +110,10 @@ func init() {
 	channelId2Models = make(map[int][]string)
 	for i := 1; i < channeltype.Dummy; i++ {
 		adaptor := relay.GetAdaptor(channeltype.ToAPIType(i))
+		if adaptor == nil {
+			channelId2Models[i] = nil
+			continue
+		}
 		meta := &meta.Meta{
 			ChannelType: i,
 		}

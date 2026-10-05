@@ -15,7 +15,6 @@ import (
 	"github.com/infinmalum/one-gateway/relay/adaptor/ollama"
 	"github.com/infinmalum/one-gateway/relay/adaptor/openai"
 	"github.com/infinmalum/one-gateway/relay/adaptor/palm"
-	"github.com/infinmalum/one-gateway/relay/adaptor/proxy"
 	"github.com/infinmalum/one-gateway/relay/adaptor/replicate"
 	"github.com/infinmalum/one-gateway/relay/adaptor/tencent"
 	"github.com/infinmalum/one-gateway/relay/adaptor/vertexai"
@@ -60,8 +59,6 @@ func GetAdaptor(apiType int) adaptor.Adaptor {
 		return &deepl.Adaptor{}
 	case apitype.VertexAI:
 		return &vertexai.Adaptor{}
-	case apitype.Proxy:
-		return &proxy.Adaptor{}
 	case apitype.Replicate:
 		return &replicate.Adaptor{}
 	}

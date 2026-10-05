@@ -1,16 +1,20 @@
 package relay
 
 import (
-	. "github.com/smartystreets/goconvey/convey"
-	"github.com/infinmalum/one-gateway/relay/apitype"
 	"testing"
+
+	"github.com/infinmalum/one-gateway/relay/apitype"
 )
 
 func TestGetAdaptor(t *testing.T) {
-	Convey("get adaptor", t, func() {
-		for i := 0; i < apitype.Dummy; i++ {
-			a := GetAdaptor(i)
-			So(a, ShouldNotBeNil)
+	for i := 0; i < apitype.Dummy; i++ {
+		if i == apitype.Proxy || i == apitype.Dummy {
+			// Proxy requests bypass adapters entirely; the sentinel type has
+			// no adaptor.
+			continue
 		}
-	})
+		if GetAdaptor(i) == nil {
+			t.Errorf("api type %d has no adaptor", i)
+		}
+	}
 }

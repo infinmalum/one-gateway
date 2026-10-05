@@ -56,6 +56,26 @@ func ReserveNativeQuota(ctx context.Context, reservation NativeReservation, maxO
 	return &reservation, nil
 }
 
+// ReserveFixedQuota reserves an exact operation charge, such as image size
+// pricing or audio input length, instead of a token-based estimate. The
+// amounts themselves come from the caller's ratio computation.
+func ReserveFixedQuota(ctx context.Context, reservation NativeReservation, amount int64) (*NativeReservation, error) {
+	if amount < 0 {
+		return nil, errors.New("fixed quota must not be negative")
+	}
+	reservation.ModelRatio = ratio.GetModelRatio(reservation.ModelName, reservation.ChannelType)
+	reservation.GroupRatio = ratio.GetGroupRatio(reservation.Group)
+	reservation.CompletionRatio = ratio.GetCompletionRatio(reservation.ModelName, reservation.ChannelType)
+	reservation.StartedAt = time.Now()
+	reservation.Reserved = amount
+	var err error
+	reservation.quota, err = Reserve(ctx, reservation.UserID, reservation.TokenID, amount)
+	if err != nil {
+		return nil, err
+	}
+	return &reservation, nil
+}
+
 func (r *NativeReservation) Refund(ctx context.Context) {
 	if r == nil {
 		return
@@ -114,6 +134,41 @@ func (r *NativeReservation) Settle(ctx context.Context, usage native.Usage, stre
 		IsStream:          streamed,
 		ElapsedTime:       time.Since(r.StartedAt).Milliseconds(),
 		SystemPromptReset: r.SystemPromptReset,
+	})
+	model.UpdateUserUsedQuotaAndRequestCount(r.UserID, quota)
+	model.UpdateChannelUsedQuota(r.ChannelID, quota)
+}
+
+// SettleDirect charges an operation-specific amount without token ratio math,
+// for operations whose price the gateway already computed (images) or that
+// bill on a derived measure of the response (audio transcription text).
+func (r *NativeReservation) SettleDirect(ctx context.Context, amount, promptTokens int64, interrupted bool) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.finished {
+		return
+	}
+	quota := r.quota.Settle(ctx, amount)
+	r.finished = true
+	if quota == 0 {
+		return
+	}
+	content := fmt.Sprintf("fixed quota; ratio: %.2f × %.2f", r.ModelRatio, r.GroupRatio)
+	if interrupted {
+		content += "; response interrupted"
+	}
+	model.RecordConsumeLog(ctx, &model.Log{
+		UserId:       r.UserID,
+		ChannelId:    r.ChannelID,
+		PromptTokens: int(promptTokens),
+		ModelName:    r.ModelName,
+		TokenName:    r.TokenName,
+		Quota:        int(quota),
+		Content:      content,
+		ElapsedTime:  time.Since(r.StartedAt).Milliseconds(),
 	})
 	model.UpdateUserUsedQuotaAndRequestCount(r.UserID, quota)
 	model.UpdateChannelUsedQuota(r.ChannelID, quota)
