@@ -11,10 +11,10 @@ import (
 
 	"github.com/infinmalum/one-gateway/common/render"
 
-	"github.com/gin-gonic/gin"
 	"github.com/infinmalum/one-gateway/common"
 	"github.com/infinmalum/one-gateway/common/conv"
 	"github.com/infinmalum/one-gateway/common/logger"
+	"github.com/infinmalum/one-gateway/relay/adaptor"
 	"github.com/infinmalum/one-gateway/relay/model"
 	"github.com/infinmalum/one-gateway/relay/relaymode"
 )
@@ -25,13 +25,13 @@ const (
 	dataPrefixLength = len(dataPrefix)
 )
 
-func StreamHandler(c *gin.Context, resp *http.Response, relayMode int) (*model.ErrorWithStatusCode, string, *model.Usage) {
+func StreamHandler(c *adaptor.Context, resp *http.Response, relayMode int) (*model.ErrorWithStatusCode, string, *model.Usage) {
 	responseText := ""
 	scanner := bufio.NewScanner(resp.Body)
 	scanner.Split(bufio.ScanLines)
 	var usage *model.Usage
 
-	common.SetEventStreamHeaders(c)
+	common.SetEventStreamHeaders(c.Writer)
 
 	doneRendered := false
 	for scanner.Scan() {
@@ -43,7 +43,7 @@ func StreamHandler(c *gin.Context, resp *http.Response, relayMode int) (*model.E
 			continue
 		}
 		if strings.HasPrefix(data[dataPrefixLength:], done) {
-			render.StringData(c, data)
+			render.StringData(c.Writer, data)
 			doneRendered = true
 			continue
 		}
@@ -53,14 +53,14 @@ func StreamHandler(c *gin.Context, resp *http.Response, relayMode int) (*model.E
 			err := json.Unmarshal([]byte(data[dataPrefixLength:]), &streamResponse)
 			if err != nil {
 				logger.SysError("error unmarshalling stream response: " + err.Error())
-				render.StringData(c, data) // if error happened, pass the data to client
-				continue                   // just ignore the error
+				render.StringData(c.Writer, data) // if error happened, pass the data to client
+				continue                          // just ignore the error
 			}
 			if len(streamResponse.Choices) == 0 && streamResponse.Usage == nil {
 				// but for empty choice and no usage, we should not pass it to client, this is for azure
 				continue // just ignore empty choice
 			}
-			render.StringData(c, data)
+			render.StringData(c.Writer, data)
 			for _, choice := range streamResponse.Choices {
 				responseText += conv.AsString(choice.Delta.Content)
 			}
@@ -68,7 +68,7 @@ func StreamHandler(c *gin.Context, resp *http.Response, relayMode int) (*model.E
 				usage = streamResponse.Usage
 			}
 		case relaymode.Completions:
-			render.StringData(c, data)
+			render.StringData(c.Writer, data)
 			var streamResponse CompletionsStreamResponse
 			err := json.Unmarshal([]byte(data[dataPrefixLength:]), &streamResponse)
 			if err != nil {
@@ -96,7 +96,7 @@ func StreamHandler(c *gin.Context, resp *http.Response, relayMode int) (*model.E
 	return nil, responseText, usage
 }
 
-func Handler(c *gin.Context, resp *http.Response, promptTokens int, modelName string) (*model.ErrorWithStatusCode, *model.Usage) {
+func Handler(c *adaptor.Context, resp *http.Response, promptTokens int, modelName string) (*model.ErrorWithStatusCode, *model.Usage) {
 	var textResponse SlimTextResponse
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {

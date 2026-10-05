@@ -13,13 +13,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 
 	"github.com/infinmalum/one-gateway/common"
 	"github.com/infinmalum/one-gateway/common/helper"
 	"github.com/infinmalum/one-gateway/common/logger"
 	"github.com/infinmalum/one-gateway/common/random"
+	"github.com/infinmalum/one-gateway/relay/adaptor"
 	"github.com/infinmalum/one-gateway/relay/adaptor/openai"
 	"github.com/infinmalum/one-gateway/relay/constant"
 	"github.com/infinmalum/one-gateway/relay/meta"
@@ -29,7 +29,7 @@ import (
 // https://console.xfyun.cn/services/cbm
 // https://www.xfyun.cn/doc/spark/Web.html
 
-func requestOpenAI2Xunfei(request model.GeneralOpenAIRequest, xunfeiAppId string, domain string) *ChatRequest {
+func requestOpenAI2Xunfei(request model.TextRequest, xunfeiAppId string, domain string) *ChatRequest {
 	messages := make([]Message, 0, len(request.Messages))
 	for _, message := range request.Messages {
 		messages = append(messages, Message{
@@ -153,13 +153,13 @@ func buildXunfeiAuthUrl(hostUrl string, apiKey, apiSecret string) string {
 	return callUrl
 }
 
-func StreamHandler(c *gin.Context, meta *meta.Meta, textRequest model.GeneralOpenAIRequest, appId string, apiSecret string, apiKey string) (*model.ErrorWithStatusCode, *model.Usage) {
+func StreamHandler(c *adaptor.Context, meta *meta.Meta, textRequest model.TextRequest, appId string, apiSecret string, apiKey string) (*model.ErrorWithStatusCode, *model.Usage) {
 	domain, authUrl := getXunfeiAuthUrl(meta.Config.APIVersion, apiKey, apiSecret)
 	dataChan, stopChan, err := xunfeiMakeRequest(textRequest, domain, authUrl, appId)
 	if err != nil {
 		return openai.ErrorWrapper(err, "xunfei_request_failed", http.StatusInternalServerError), nil
 	}
-	common.SetEventStreamHeaders(c)
+	common.SetEventStreamHeaders(c.Writer)
 	var usage model.Usage
 	c.Stream(func(w io.Writer) bool {
 		select {
@@ -183,7 +183,7 @@ func StreamHandler(c *gin.Context, meta *meta.Meta, textRequest model.GeneralOpe
 	return nil, &usage
 }
 
-func Handler(c *gin.Context, meta *meta.Meta, textRequest model.GeneralOpenAIRequest, appId string, apiSecret string, apiKey string) (*model.ErrorWithStatusCode, *model.Usage) {
+func Handler(c *adaptor.Context, meta *meta.Meta, textRequest model.TextRequest, appId string, apiSecret string, apiKey string) (*model.ErrorWithStatusCode, *model.Usage) {
 	domain, authUrl := getXunfeiAuthUrl(meta.Config.APIVersion, apiKey, apiSecret)
 	dataChan, stopChan, err := xunfeiMakeRequest(textRequest, domain, authUrl, appId)
 	if err != nil {
@@ -221,7 +221,7 @@ func Handler(c *gin.Context, meta *meta.Meta, textRequest model.GeneralOpenAIReq
 	return nil, &usage
 }
 
-func xunfeiMakeRequest(textRequest model.GeneralOpenAIRequest, domain, authUrl, appId string) (chan ChatResponse, chan bool, error) {
+func xunfeiMakeRequest(textRequest model.TextRequest, domain, authUrl, appId string) (chan ChatResponse, chan bool, error) {
 	d := websocket.Dialer{
 		HandshakeTimeout: 5 * time.Second,
 	}

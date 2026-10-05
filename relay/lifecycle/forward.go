@@ -27,6 +27,9 @@ type Channel struct {
 	ModelMapping map[string]string
 	SystemPrompt string
 	APIVersion   string
+	// Config carries provider-specific channel settings such as Ali plugins,
+	// AIProxyLibrary IDs, and VertexAI credentials.
+	Config model.ChannelConfig
 }
 
 type Principal struct {
@@ -505,6 +508,7 @@ func channelFromModel(channel *model.Channel) (Channel, error) {
 	selected := Channel{
 		ID: channel.Id, Type: channel.Type, BaseURL: baseURL, APIKey: channel.Key,
 		ModelMapping: channel.GetModelMapping(), APIVersion: config.APIVersion,
+		Config: config,
 	}
 	if channel.SystemPrompt != nil {
 		selected.SystemPrompt = *channel.SystemPrompt

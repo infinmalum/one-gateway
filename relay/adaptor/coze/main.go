@@ -4,16 +4,16 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
-	"github.com/infinmalum/one-gateway/common/render"
 	"io"
 	"net/http"
 	"strings"
 
-	"github.com/gin-gonic/gin"
 	"github.com/infinmalum/one-gateway/common"
 	"github.com/infinmalum/one-gateway/common/conv"
 	"github.com/infinmalum/one-gateway/common/helper"
 	"github.com/infinmalum/one-gateway/common/logger"
+	"github.com/infinmalum/one-gateway/common/render"
+	"github.com/infinmalum/one-gateway/relay/adaptor"
 	"github.com/infinmalum/one-gateway/relay/adaptor/coze/constant/messagetype"
 	"github.com/infinmalum/one-gateway/relay/adaptor/openai"
 	"github.com/infinmalum/one-gateway/relay/model"
@@ -37,7 +37,7 @@ func stopReasonCoze2OpenAI(reason *string) string {
 	}
 }
 
-func ConvertRequest(textRequest model.GeneralOpenAIRequest) *Request {
+func ConvertRequest(textRequest model.TextRequest) *Request {
 	cozeRequest := Request{
 		Stream: textRequest.Stream,
 		User:   textRequest.User,
@@ -107,13 +107,13 @@ func ResponseCoze2OpenAI(cozeResponse *Response) *openai.TextResponse {
 	return &fullTextResponse
 }
 
-func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCode, *string) {
+func StreamHandler(c *adaptor.Context, resp *http.Response) (*model.ErrorWithStatusCode, *string) {
 	var responseText string
 	createdTime := helper.GetTimestamp()
 	scanner := bufio.NewScanner(resp.Body)
 	scanner.Split(bufio.ScanLines)
 
-	common.SetEventStreamHeaders(c)
+	common.SetEventStreamHeaders(c.Writer)
 	var modelName string
 	complete := false
 
@@ -144,7 +144,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 		response.Model = modelName
 		response.Created = createdTime
 
-		err = render.ObjectData(c, response)
+		err = render.ObjectData(c.Writer, response)
 		if err != nil {
 			logger.SysError(err.Error())
 		}
@@ -159,7 +159,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 		return openai.ErrorWrapper(io.ErrUnexpectedEOF, "stream_incomplete", http.StatusBadGateway), &responseText
 	}
 
-	render.Done(c)
+	render.Done(c.Writer)
 
 	err := resp.Body.Close()
 	if err != nil {
@@ -169,7 +169,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 	return nil, &responseText
 }
 
-func Handler(c *gin.Context, resp *http.Response, promptTokens int, modelName string) (*model.ErrorWithStatusCode, *string) {
+func Handler(c *adaptor.Context, resp *http.Response, promptTokens int, modelName string) (*model.ErrorWithStatusCode, *string) {
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return openai.ErrorWrapper(err, "read_response_body_failed", http.StatusInternalServerError), nil

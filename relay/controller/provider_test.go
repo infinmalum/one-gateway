@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gin-gonic/gin"
+	"github.com/infinmalum/one-gateway/relay/adaptor"
 	"github.com/infinmalum/one-gateway/relay/adaptor/openai"
 	"github.com/infinmalum/one-gateway/relay/apitype"
 	"github.com/infinmalum/one-gateway/relay/meta"
@@ -16,9 +16,10 @@ import (
 )
 
 func TestPreserveProviderFieldsAfterModelMapping(t *testing.T) {
-	context, _ := gin.CreateTestContext(httptest.NewRecorder())
-	context.Request = httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(`{"model":"alias","messages":[],"search_enabled":true,"extra_body":{"vendor_flag":1}}`))
-	converted, err := preserveExtraRequestFields(context, []byte(`{"model":"upstream-model","messages":[]}`))
+	converted, err := preserveExtraRequestFields(
+		[]byte(`{"model":"alias","messages":[],"search_enabled":true,"extra_body":{"vendor_flag":1}}`),
+		[]byte(`{"model":"upstream-model","messages":[]}`),
+	)
 	require.NoError(t, err)
 	var body map[string]any
 	require.NoError(t, json.Unmarshal(converted, &body))
@@ -28,12 +29,14 @@ func TestPreserveProviderFieldsAfterModelMapping(t *testing.T) {
 }
 
 func TestMappedOpenAIRequestKeepsProviderFields(t *testing.T) {
-	context, _ := gin.CreateTestContext(httptest.NewRecorder())
-	context.Request = httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(`{"model":"alias","search_enabled":true}`))
-	context.Request.Header.Set("Content-Type", "application/json")
-	request := &model.GeneralOpenAIRequest{Model: "upstream-model"}
-	metadata := &meta.Meta{APIType: apitype.OpenAI, OriginModelName: "alias", ActualModelName: "upstream-model"}
-	body, err := getRequestBody(context, metadata, request, &openai.Adaptor{})
+	transport := adaptor.NewContext(
+		httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(`{"model":"alias","search_enabled":true}`)),
+		httptest.NewRecorder(),
+	)
+	transport.Request.Header.Set("Content-Type", "application/json")
+	request := &model.TextRequest{Model: "upstream-model"}
+	requestMeta := &meta.Meta{APIType: apitype.OpenAI, OriginModelName: "alias", ActualModelName: "upstream-model"}
+	body, err := providerRequestBody(transport, []byte(`{"model":"alias","search_enabled":true}`), requestMeta, request, &openai.Adaptor{})
 	require.NoError(t, err)
 	encoded, err := io.ReadAll(body)
 	require.NoError(t, err)

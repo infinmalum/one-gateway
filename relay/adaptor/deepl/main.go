@@ -2,21 +2,22 @@ package deepl
 
 import (
 	"encoding/json"
-	"github.com/gin-gonic/gin"
+	"io"
+	"net/http"
+
 	"github.com/infinmalum/one-gateway/common"
 	"github.com/infinmalum/one-gateway/common/helper"
+	"github.com/infinmalum/one-gateway/relay/adaptor"
 	"github.com/infinmalum/one-gateway/relay/adaptor/openai"
 	"github.com/infinmalum/one-gateway/relay/constant"
 	"github.com/infinmalum/one-gateway/relay/constant/finishreason"
 	"github.com/infinmalum/one-gateway/relay/constant/role"
 	"github.com/infinmalum/one-gateway/relay/model"
-	"io"
-	"net/http"
 )
 
 // https://developers.deepl.com/docs/getting-started/your-first-api-request
 
-func ConvertRequest(textRequest model.GeneralOpenAIRequest) (*Request, string) {
+func ConvertRequest(textRequest model.TextRequest) (*Request, string) {
 	var text string
 	if len(textRequest.Messages) != 0 {
 		text = textRequest.Messages[len(textRequest.Messages)-1].StringContent()
@@ -65,7 +66,7 @@ func ResponseDeepL2OpenAI(deeplResponse *Response) *openai.TextResponse {
 	return &fullTextResponse
 }
 
-func StreamHandler(c *gin.Context, resp *http.Response, modelName string) *model.ErrorWithStatusCode {
+func StreamHandler(c *adaptor.Context, resp *http.Response, modelName string) *model.ErrorWithStatusCode {
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return openai.ErrorWrapper(err, "read_response_body_failed", http.StatusInternalServerError)
@@ -81,12 +82,12 @@ func StreamHandler(c *gin.Context, resp *http.Response, modelName string) *model
 	}
 	fullTextResponse := StreamResponseDeepL2OpenAI(&deeplResponse)
 	fullTextResponse.Model = modelName
-	fullTextResponse.Id = helper.GetResponseID(c)
+	fullTextResponse.Id = helper.GetResponseID(c.GetString(helper.RequestIdKey))
 	jsonData, err := json.Marshal(fullTextResponse)
 	if err != nil {
 		return openai.ErrorWrapper(err, "marshal_response_body_failed", http.StatusInternalServerError)
 	}
-	common.SetEventStreamHeaders(c)
+	common.SetEventStreamHeaders(c.Writer)
 	c.Stream(func(w io.Writer) bool {
 		if jsonData != nil {
 			c.Render(-1, common.CustomEvent{Data: "data: " + string(jsonData)})
@@ -100,7 +101,7 @@ func StreamHandler(c *gin.Context, resp *http.Response, modelName string) *model
 	return nil
 }
 
-func Handler(c *gin.Context, resp *http.Response, modelName string) *model.ErrorWithStatusCode {
+func Handler(c *adaptor.Context, resp *http.Response, modelName string) *model.ErrorWithStatusCode {
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return openai.ErrorWrapper(err, "read_response_body_failed", http.StatusInternalServerError)
@@ -125,7 +126,7 @@ func Handler(c *gin.Context, resp *http.Response, modelName string) *model.Error
 	}
 	fullTextResponse := ResponseDeepL2OpenAI(&deeplResponse)
 	fullTextResponse.Model = modelName
-	fullTextResponse.Id = helper.GetResponseID(c)
+	fullTextResponse.Id = helper.GetResponseID(c.GetString(helper.RequestIdKey))
 	jsonResponse, err := json.Marshal(fullTextResponse)
 	if err != nil {
 		return openai.ErrorWrapper(err, "marshal_response_body_failed", http.StatusInternalServerError)

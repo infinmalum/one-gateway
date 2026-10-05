@@ -2,8 +2,8 @@ package aws
 
 import (
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
-	"github.com/gin-gonic/gin"
 	"github.com/infinmalum/one-gateway/common/ctxkey"
+	"github.com/infinmalum/one-gateway/relay/adaptor"
 	"github.com/infinmalum/one-gateway/relay/adaptor/anthropic"
 	"github.com/infinmalum/one-gateway/relay/adaptor/aws/utils"
 	"github.com/infinmalum/one-gateway/relay/meta"
@@ -28,7 +28,7 @@ func (a *Adaptor) ConvertRequest(in *model.ConversionInput) (any, error) {
 	return claudeReq, nil
 }
 
-func (a *Adaptor) DoResponse(c *gin.Context, awsCli *bedrockruntime.Client, meta *meta.Meta) (usage *model.Usage, err *model.ErrorWithStatusCode) {
+func (a *Adaptor) DoResponse(c *adaptor.Context, awsCli *bedrockruntime.Client, meta *meta.Meta) (usage *model.Usage, err *model.ErrorWithStatusCode) {
 	if meta.IsStream {
 		err, usage = StreamHandler(c, awsCli)
 	} else {

@@ -3,15 +3,15 @@ package palm
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/infinmalum/one-gateway/common/render"
 	"io"
 	"net/http"
 
-	"github.com/gin-gonic/gin"
 	"github.com/infinmalum/one-gateway/common"
 	"github.com/infinmalum/one-gateway/common/helper"
 	"github.com/infinmalum/one-gateway/common/logger"
 	"github.com/infinmalum/one-gateway/common/random"
+	"github.com/infinmalum/one-gateway/common/render"
+	"github.com/infinmalum/one-gateway/relay/adaptor"
 	"github.com/infinmalum/one-gateway/relay/adaptor/openai"
 	"github.com/infinmalum/one-gateway/relay/constant"
 	"github.com/infinmalum/one-gateway/relay/model"
@@ -20,7 +20,7 @@ import (
 // https://developers.generativeai.google/api/rest/generativelanguage/models/generateMessage#request-body
 // https://developers.generativeai.google/api/rest/generativelanguage/models/generateMessage#response-body
 
-func ConvertRequest(textRequest model.GeneralOpenAIRequest) *ChatRequest {
+func ConvertRequest(textRequest model.TextRequest) *ChatRequest {
 	palmRequest := ChatRequest{
 		Prompt: Prompt{
 			Messages: make([]ChatMessage, 0, len(textRequest.Messages)),
@@ -75,12 +75,12 @@ func streamResponsePaLM2OpenAI(palmResponse *ChatResponse) *openai.ChatCompletio
 	return &response
 }
 
-func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCode, string) {
+func StreamHandler(c *adaptor.Context, resp *http.Response) (*model.ErrorWithStatusCode, string) {
 	responseText := ""
 	responseId := fmt.Sprintf("chatcmpl-%s", random.GetUUID())
 	createdTime := helper.GetTimestamp()
 
-	common.SetEventStreamHeaders(c)
+	common.SetEventStreamHeaders(c.Writer)
 
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -117,17 +117,17 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 		return openai.ErrorWrapper(err, "marshal_response_body_failed", http.StatusInternalServerError), ""
 	}
 
-	err = render.ObjectData(c, string(jsonResponse))
+	err = render.ObjectData(c.Writer, string(jsonResponse))
 	if err != nil {
 		logger.SysError(err.Error())
 	}
 
-	render.Done(c)
+	render.Done(c.Writer)
 
 	return nil, responseText
 }
 
-func Handler(c *gin.Context, resp *http.Response, promptTokens int, modelName string) (*model.ErrorWithStatusCode, *model.Usage) {
+func Handler(c *adaptor.Context, resp *http.Response, promptTokens int, modelName string) (*model.ErrorWithStatusCode, *model.Usage) {
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return openai.ErrorWrapper(err, "read_response_body_failed", http.StatusInternalServerError), nil

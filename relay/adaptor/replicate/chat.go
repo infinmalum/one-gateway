@@ -8,16 +8,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/infinmalum/one-gateway/common"
 	"github.com/infinmalum/one-gateway/common/render"
+	"github.com/infinmalum/one-gateway/relay/adaptor"
 	"github.com/infinmalum/one-gateway/relay/adaptor/openai"
-	"github.com/infinmalum/one-gateway/relay/ginmeta"
+	"github.com/infinmalum/one-gateway/relay/meta"
 	"github.com/infinmalum/one-gateway/relay/model"
 	"github.com/pkg/errors"
 )
 
-func ChatHandler(c *gin.Context, resp *http.Response) (
+func ChatHandler(c *adaptor.Context, resp *http.Response, meta *meta.Meta) (
 	srvErr *model.ErrorWithStatusCode, usage *model.Usage) {
 	if resp.StatusCode != http.StatusCreated {
 		payload, _ := io.ReadAll(resp.Body)
@@ -46,7 +46,7 @@ func ChatHandler(c *gin.Context, resp *http.Response) (
 				return errors.Wrap(err, "new request")
 			}
 
-			taskReq.Header.Set("Authorization", "Bearer "+ginmeta.Get(c).APIKey)
+			taskReq.Header.Set("Authorization", "Bearer "+meta.APIKey)
 			taskResp, err := http.DefaultClient.Do(taskReq)
 			if err != nil {
 				return errors.Wrap(err, "get task")
@@ -83,14 +83,13 @@ func ChatHandler(c *gin.Context, resp *http.Response) (
 			}
 
 			// request stream url
-			responseText, err := chatStreamHandler(c, taskData.URLs.Stream)
+			responseText, err := chatStreamHandler(c, meta, taskData.URLs.Stream)
 			if err != nil {
 				return errors.Wrap(err, "chat stream handler")
 			}
 
-			ctxMeta := ginmeta.Get(c)
 			usage = openai.ResponseText2Usage(responseText,
-				ctxMeta.ActualModelName, ctxMeta.PromptTokens)
+				meta.ActualModelName, meta.PromptTokens)
 			return nil
 		}()
 		if err != nil {
@@ -113,14 +112,14 @@ const (
 	done        = "[DONE]"
 )
 
-func chatStreamHandler(c *gin.Context, streamUrl string) (responseText string, err error) {
+func chatStreamHandler(c *adaptor.Context, meta *meta.Meta, streamUrl string) (responseText string, err error) {
 	// request stream endpoint
 	streamReq, err := http.NewRequestWithContext(c.Request.Context(), http.MethodGet, streamUrl, nil)
 	if err != nil {
 		return "", errors.Wrap(err, "new request to stream")
 	}
 
-	streamReq.Header.Set("Authorization", "Bearer "+ginmeta.Get(c).APIKey)
+	streamReq.Header.Set("Authorization", "Bearer "+meta.APIKey)
 	streamReq.Header.Set("Accept", "text/event-stream")
 	streamReq.Header.Set("Cache-Control", "no-store")
 
@@ -138,7 +137,7 @@ func chatStreamHandler(c *gin.Context, streamUrl string) (responseText string, e
 	scanner := bufio.NewScanner(resp.Body)
 	scanner.Split(bufio.ScanLines)
 
-	common.SetEventStreamHeaders(c)
+	common.SetEventStreamHeaders(c.Writer)
 	doneRendered := false
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
@@ -169,10 +168,10 @@ func chatStreamHandler(c *gin.Context, streamUrl string) (responseText string, e
 			}
 
 			if event == "output" {
-				render.StringData(c, data)
+				render.StringData(c.Writer, data)
 				responseText += data
 			} else if event == "done" {
-				render.Done(c)
+				render.Done(c.Writer)
 				doneRendered = true
 				break
 			}

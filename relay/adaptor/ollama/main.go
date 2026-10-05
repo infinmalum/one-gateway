@@ -5,24 +5,23 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/infinmalum/one-gateway/common/render"
 	"io"
 	"net/http"
 	"strings"
 
-	"github.com/infinmalum/one-gateway/common/helper"
-	"github.com/infinmalum/one-gateway/common/random"
-
-	"github.com/gin-gonic/gin"
 	"github.com/infinmalum/one-gateway/common"
+	"github.com/infinmalum/one-gateway/common/helper"
 	"github.com/infinmalum/one-gateway/common/image"
 	"github.com/infinmalum/one-gateway/common/logger"
+	"github.com/infinmalum/one-gateway/common/random"
+	"github.com/infinmalum/one-gateway/common/render"
+	"github.com/infinmalum/one-gateway/relay/adaptor"
 	"github.com/infinmalum/one-gateway/relay/adaptor/openai"
 	"github.com/infinmalum/one-gateway/relay/constant"
 	"github.com/infinmalum/one-gateway/relay/model"
 )
 
-func ConvertRequest(request model.GeneralOpenAIRequest) *ChatRequest {
+func ConvertRequest(request model.TextRequest) *ChatRequest {
 	ollamaRequest := ChatRequest{
 		Model: request.Model,
 		Options: &Options{
@@ -101,7 +100,7 @@ func streamResponseOllama2OpenAI(ollamaResponse *ChatResponse) *openai.ChatCompl
 	return &response
 }
 
-func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCode, *model.Usage) {
+func StreamHandler(c *adaptor.Context, resp *http.Response) (*model.ErrorWithStatusCode, *model.Usage) {
 	var usage model.Usage
 	scanner := bufio.NewScanner(resp.Body)
 	scanner.Split(func(data []byte, atEOF bool) (advance int, token []byte, err error) {
@@ -117,7 +116,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 		return 0, nil, nil
 	})
 
-	common.SetEventStreamHeaders(c)
+	common.SetEventStreamHeaders(c.Writer)
 	complete := false
 
 	for scanner.Scan() {
@@ -143,7 +142,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 		}
 
 		response := streamResponseOllama2OpenAI(&ollamaResponse)
-		err = render.ObjectData(c, response)
+		err = render.ObjectData(c.Writer, response)
 		if err != nil {
 			logger.SysError(err.Error())
 		}
@@ -151,7 +150,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 
 	scanErr := scanner.Err()
 	if scanErr == nil && complete {
-		render.Done(c)
+		render.Done(c.Writer)
 	}
 	err := resp.Body.Close()
 	if err != nil {
@@ -167,7 +166,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 	return nil, &usage
 }
 
-func ConvertEmbeddingRequest(request model.GeneralOpenAIRequest) *EmbeddingRequest {
+func ConvertEmbeddingRequest(request model.TextRequest) *EmbeddingRequest {
 	return &EmbeddingRequest{
 		Model: request.Model,
 		Input: request.ParseInput(),
@@ -181,7 +180,7 @@ func ConvertEmbeddingRequest(request model.GeneralOpenAIRequest) *EmbeddingReque
 	}
 }
 
-func EmbeddingHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCode, *model.Usage) {
+func EmbeddingHandler(c *adaptor.Context, resp *http.Response) (*model.ErrorWithStatusCode, *model.Usage) {
 	var ollamaResponse EmbeddingResponse
 	err := json.NewDecoder(resp.Body).Decode(&ollamaResponse)
 	if err != nil {
@@ -234,7 +233,7 @@ func embeddingResponseOllama2OpenAI(response *EmbeddingResponse) *openai.Embeddi
 	return &openAIEmbeddingResponse
 }
 
-func Handler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCode, *model.Usage) {
+func Handler(c *adaptor.Context, resp *http.Response) (*model.ErrorWithStatusCode, *model.Usage) {
 	ctx := context.TODO()
 	var ollamaResponse ChatResponse
 	responseBody, err := io.ReadAll(resp.Body)

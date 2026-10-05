@@ -14,8 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gin-gonic/gin"
-
 	"github.com/infinmalum/one-gateway/common"
 	"github.com/infinmalum/one-gateway/common/conv"
 	"github.com/infinmalum/one-gateway/common/ctxkey"
@@ -23,12 +21,13 @@ import (
 	"github.com/infinmalum/one-gateway/common/logger"
 	"github.com/infinmalum/one-gateway/common/random"
 	"github.com/infinmalum/one-gateway/common/render"
+	"github.com/infinmalum/one-gateway/relay/adaptor"
 	"github.com/infinmalum/one-gateway/relay/adaptor/openai"
 	"github.com/infinmalum/one-gateway/relay/constant"
 	"github.com/infinmalum/one-gateway/relay/model"
 )
 
-func ConvertRequest(request model.GeneralOpenAIRequest) *ChatRequest {
+func ConvertRequest(request model.TextRequest) *ChatRequest {
 	messages := make([]*Message, 0, len(request.Messages))
 	for i := 0; i < len(request.Messages); i++ {
 		message := request.Messages[i]
@@ -46,13 +45,13 @@ func ConvertRequest(request model.GeneralOpenAIRequest) *ChatRequest {
 	}
 }
 
-func ConvertEmbeddingRequest(request model.GeneralOpenAIRequest) *EmbeddingRequest {
+func ConvertEmbeddingRequest(request model.TextRequest) *EmbeddingRequest {
 	return &EmbeddingRequest{
 		InputList: request.ParseInput(),
 	}
 }
 
-func EmbeddingHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCode, *model.Usage) {
+func EmbeddingHandler(c *adaptor.Context, resp *http.Response) (*model.ErrorWithStatusCode, *model.Usage) {
 	var tencentResponseP EmbeddingResponseP
 	err := json.NewDecoder(resp.Body).Decode(&tencentResponseP)
 	if err != nil {
@@ -148,12 +147,12 @@ func streamResponseTencent2OpenAI(TencentResponse *ChatResponse) *openai.ChatCom
 	return &response
 }
 
-func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCode, string) {
+func StreamHandler(c *adaptor.Context, resp *http.Response) (*model.ErrorWithStatusCode, string) {
 	var responseText string
 	scanner := bufio.NewScanner(resp.Body)
 	scanner.Split(bufio.ScanLines)
 
-	common.SetEventStreamHeaders(c)
+	common.SetEventStreamHeaders(c.Writer)
 	complete := false
 
 	for scanner.Scan() {
@@ -178,7 +177,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 			responseText += conv.AsString(response.Choices[0].Delta.Content)
 		}
 
-		err = render.ObjectData(c, response)
+		err = render.ObjectData(c.Writer, response)
 		if err != nil {
 			logger.SysError(err.Error())
 		}
@@ -193,7 +192,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 		return openai.ErrorWrapper(io.ErrUnexpectedEOF, "stream_incomplete", http.StatusBadGateway), responseText
 	}
 
-	render.Done(c)
+	render.Done(c.Writer)
 
 	err := resp.Body.Close()
 	if err != nil {
@@ -203,7 +202,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 	return nil, responseText
 }
 
-func Handler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCode, *model.Usage) {
+func Handler(c *adaptor.Context, resp *http.Response) (*model.ErrorWithStatusCode, *model.Usage) {
 	var TencentResponse ChatResponse
 	var responseP ChatResponseP
 	responseBody, err := io.ReadAll(resp.Body)

@@ -8,19 +8,17 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/infinmalum/one-gateway/common/render"
-
 	"github.com/infinmalum/one-gateway/common"
 	"github.com/infinmalum/one-gateway/common/config"
 	"github.com/infinmalum/one-gateway/common/helper"
 	"github.com/infinmalum/one-gateway/common/image"
 	"github.com/infinmalum/one-gateway/common/logger"
 	"github.com/infinmalum/one-gateway/common/random"
+	"github.com/infinmalum/one-gateway/common/render"
+	"github.com/infinmalum/one-gateway/relay/adaptor"
 	"github.com/infinmalum/one-gateway/relay/adaptor/openai"
 	"github.com/infinmalum/one-gateway/relay/constant"
 	"github.com/infinmalum/one-gateway/relay/model"
-
-	"github.com/gin-gonic/gin"
 )
 
 // https://ai.google.dev/docs/gemini_api_overview?hl=zh-cn
@@ -35,7 +33,7 @@ var mimeTypeMap = map[string]string{
 }
 
 // Setting safety to the lowest possible values since Gemini is already powerless enough
-func ConvertRequest(textRequest model.GeneralOpenAIRequest) *ChatRequest {
+func ConvertRequest(textRequest model.TextRequest) *ChatRequest {
 	geminiRequest := ChatRequest{
 		Contents: make([]ChatContent, 0, len(textRequest.Messages)),
 		SafetySettings: []ChatSafetySettings{
@@ -161,7 +159,7 @@ func ConvertRequest(textRequest model.GeneralOpenAIRequest) *ChatRequest {
 	return &geminiRequest
 }
 
-func ConvertEmbeddingRequest(request model.GeneralOpenAIRequest) *BatchEmbeddingRequest {
+func ConvertEmbeddingRequest(request model.TextRequest) *BatchEmbeddingRequest {
 	inputs := request.ParseInput()
 	requests := make([]EmbeddingRequest, len(inputs))
 	model := fmt.Sprintf("models/%s", request.Model)
@@ -306,12 +304,12 @@ func embeddingResponseGemini2OpenAI(response *EmbeddingResponse) *openai.Embeddi
 	return &openAIEmbeddingResponse
 }
 
-func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCode, string) {
+func StreamHandler(c *adaptor.Context, resp *http.Response) (*model.ErrorWithStatusCode, string) {
 	responseText := ""
 	scanner := bufio.NewScanner(resp.Body)
 	scanner.Split(bufio.ScanLines)
 
-	common.SetEventStreamHeaders(c)
+	common.SetEventStreamHeaders(c.Writer)
 
 	for scanner.Scan() {
 		data := scanner.Text()
@@ -336,7 +334,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 
 		responseText += response.Choices[0].Delta.StringContent()
 
-		err = render.ObjectData(c, response)
+		err = render.ObjectData(c.Writer, response)
 		if err != nil {
 			logger.SysError(err.Error())
 		}
@@ -346,7 +344,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 		logger.SysError("error reading stream: " + err.Error())
 	}
 
-	render.Done(c)
+	render.Done(c.Writer)
 
 	err := resp.Body.Close()
 	if err != nil {
@@ -356,7 +354,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 	return nil, responseText
 }
 
-func Handler(c *gin.Context, resp *http.Response, promptTokens int, modelName string) (*model.ErrorWithStatusCode, *model.Usage) {
+func Handler(c *adaptor.Context, resp *http.Response, promptTokens int, modelName string) (*model.ErrorWithStatusCode, *model.Usage) {
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return openai.ErrorWrapper(err, "read_response_body_failed", http.StatusInternalServerError), nil
@@ -400,7 +398,7 @@ func Handler(c *gin.Context, resp *http.Response, promptTokens int, modelName st
 	return nil, &usage
 }
 
-func EmbeddingHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCode, *model.Usage) {
+func EmbeddingHandler(c *adaptor.Context, resp *http.Response) (*model.ErrorWithStatusCode, *model.Usage) {
 	var geminiEmbeddingResponse EmbeddingResponse
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {

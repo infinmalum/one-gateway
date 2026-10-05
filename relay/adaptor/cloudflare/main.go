@@ -7,18 +7,17 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/infinmalum/one-gateway/common/ctxkey"
-	"github.com/infinmalum/one-gateway/common/render"
-
-	"github.com/gin-gonic/gin"
 	"github.com/infinmalum/one-gateway/common"
+	"github.com/infinmalum/one-gateway/common/ctxkey"
 	"github.com/infinmalum/one-gateway/common/helper"
 	"github.com/infinmalum/one-gateway/common/logger"
+	"github.com/infinmalum/one-gateway/common/render"
+	"github.com/infinmalum/one-gateway/relay/adaptor"
 	"github.com/infinmalum/one-gateway/relay/adaptor/openai"
 	"github.com/infinmalum/one-gateway/relay/model"
 )
 
-func ConvertCompletionsRequest(textRequest model.GeneralOpenAIRequest) *Request {
+func ConvertCompletionsRequest(textRequest model.TextRequest) *Request {
 	p, _ := textRequest.Prompt.(string)
 	return &Request{
 		Prompt:      p,
@@ -28,12 +27,12 @@ func ConvertCompletionsRequest(textRequest model.GeneralOpenAIRequest) *Request 
 	}
 }
 
-func StreamHandler(c *gin.Context, resp *http.Response, promptTokens int, modelName string) (*model.ErrorWithStatusCode, *model.Usage) {
+func StreamHandler(c *adaptor.Context, resp *http.Response, promptTokens int, modelName string) (*model.ErrorWithStatusCode, *model.Usage) {
 	scanner := bufio.NewScanner(resp.Body)
 	scanner.Split(bufio.ScanLines)
 
-	common.SetEventStreamHeaders(c)
-	id := helper.GetResponseID(c)
+	common.SetEventStreamHeaders(c.Writer)
+	id := helper.GetResponseID(c.GetString(helper.RequestIdKey))
 	responseModel := c.GetString(ctxkey.OriginalModel)
 	var responseText string
 	complete := false
@@ -63,7 +62,7 @@ func StreamHandler(c *gin.Context, resp *http.Response, promptTokens int, modelN
 		}
 		response.Id = id
 		response.Model = modelName
-		err = render.ObjectData(c, response)
+		err = render.ObjectData(c.Writer, response)
 		if err != nil {
 			logger.SysError(err.Error())
 		}
@@ -78,7 +77,7 @@ func StreamHandler(c *gin.Context, resp *http.Response, promptTokens int, modelN
 		return openai.ErrorWrapper(io.ErrUnexpectedEOF, "stream_incomplete", http.StatusBadGateway), nil
 	}
 
-	render.Done(c)
+	render.Done(c.Writer)
 
 	err := resp.Body.Close()
 	if err != nil {
@@ -89,7 +88,7 @@ func StreamHandler(c *gin.Context, resp *http.Response, promptTokens int, modelN
 	return nil, usage
 }
 
-func Handler(c *gin.Context, resp *http.Response, promptTokens int, modelName string) (*model.ErrorWithStatusCode, *model.Usage) {
+func Handler(c *adaptor.Context, resp *http.Response, promptTokens int, modelName string) (*model.ErrorWithStatusCode, *model.Usage) {
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return openai.ErrorWrapper(err, "read_response_body_failed", http.StatusInternalServerError), nil
@@ -110,7 +109,7 @@ func Handler(c *gin.Context, resp *http.Response, promptTokens int, modelName st
 	}
 	usage := openai.ResponseText2Usage(responseText, modelName, promptTokens)
 	response.Usage = *usage
-	response.Id = helper.GetResponseID(c)
+	response.Id = helper.GetResponseID(c.GetString(helper.RequestIdKey))
 	jsonResponse, err := json.Marshal(response)
 	if err != nil {
 		return openai.ErrorWrapper(err, "marshal_response_body_failed", http.StatusInternalServerError), nil

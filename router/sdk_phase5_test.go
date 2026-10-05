@@ -546,3 +546,93 @@ func TestPhase5ProviderChannelEmbeddingsFallbackAndRejections(t *testing.T) {
 		}
 	}
 }
+
+// The provider image formats run through the shared lifecycle with image-size
+// billing: the zhipu adapter converts the mapped request, the upstream image
+// response is forwarded untouched, and the fixed quota is settled exactly.
+func TestPhase5ProviderImageRouteUsesLifecycleBilling(t *testing.T) {
+	previousDB, previousLogDB := model.DB, model.LOG_DB
+	previousClient := commonclient.HTTPClient
+	previousRedis, previousMemoryCache, previousRetries := common.RedisEnabled, config.MemoryCacheEnabled, config.RetryTimes
+	previousSQLite := common.UsingSQLite
+	db, err := gorm.Open(sqlite.Open("file:phase5-image?mode=memory&cache=shared"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	sqlDB.SetMaxOpenConns(1)
+	if err := db.AutoMigrate(&model.User{}, &model.Token{}, &model.Channel{}, &model.Ability{}, &model.Log{}); err != nil {
+		t.Fatal(err)
+	}
+	model.DB, model.LOG_DB = db, db
+	commonclient.HTTPClient = &http.Client{}
+	common.RedisEnabled, config.MemoryCacheEnabled, common.UsingSQLite = false, false, true
+	config.RetryTimes = 0
+	t.Cleanup(func() {
+		model.DB, model.LOG_DB = previousDB, previousLogDB
+		commonclient.HTTPClient = previousClient
+		common.RedisEnabled, config.MemoryCacheEnabled, config.RetryTimes = previousRedis, previousMemoryCache, previousRetries
+		common.UsingSQLite = previousSQLite
+		_ = sqlDB.Close()
+	})
+	user := model.User{Username: "phase5-image", Status: model.UserStatusEnabled, Role: model.RoleAdminUser, Group: "default", Quota: 1000000}
+	if err := db.Create(&user).Error; err != nil {
+		t.Fatal(err)
+	}
+	token := model.Token{UserId: user.Id, Key: "phase5-image-key", Name: "phase5-image", Status: model.TokenStatusEnabled, ExpiredTime: -1, RemainQuota: 1000000}
+	if err := db.Create(&token).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	zhipuServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/paas/v4/images/generations" {
+			t.Errorf("zhipu image provider request: %s", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		body, _ := io.ReadAll(r.Body)
+		if !strings.Contains(string(body), `"model":"upstream-cogview"`) || !strings.Contains(string(body), `"prompt":"a lake"`) {
+			t.Errorf("zhipu image request lost fields: %s", body)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"created":7,"data":[{"url":"https://example.test/lake.png"}]}`)
+	}))
+	defer zhipuServer.Close()
+
+	zhipuURL := zhipuServer.URL
+	zhipuMapping := `{"cogview-3":"upstream-cogview"}`
+	zhipuChannel := model.Channel{Type: channeltype.Zhipu, Key: "phase5-zhipu-key", Name: "phase5-zhipu", Status: model.ChannelStatusEnabled, Group: "default", Models: "cogview-3", ModelMapping: &zhipuMapping, BaseURL: &zhipuURL}
+	if err := zhipuChannel.Insert(); err != nil {
+		t.Fatal(err)
+	}
+
+	gin.SetMode(gin.TestMode)
+	routes := gin.New()
+	SetRelayRouter(routes)
+	gateway := httptest.NewServer(routes)
+	defer gateway.Close()
+
+	imageRequest := httptest.NewRequest(http.MethodPost, "/v1/images/generations", strings.NewReader(`{"model":"cogview-3","prompt":"a lake"}`))
+	imageRequest.Header.Set("Content-Type", "application/json")
+	imageRequest.Header.Set("Authorization", "Bearer sk-phase5-image-key")
+	imageResponse := httptest.NewRecorder()
+	routes.ServeHTTP(imageResponse, imageRequest)
+	if imageResponse.Code != http.StatusOK || !strings.Contains(imageResponse.Body.String(), "https://example.test/lake.png") {
+		t.Fatalf("provider image route changed: status %d body %s", imageResponse.Code, imageResponse.Body.String())
+	}
+	time.Sleep(100 * time.Millisecond)
+	var imageLog model.Log
+	if err := db.Where("channel_id = ? AND type = ?", zhipuChannel.Id, model.LogTypeConsume).First(&imageLog).Error; err != nil {
+		t.Fatalf("provider image quota was not settled: %v", err)
+	}
+	expectedQuota := int64(billingratio.GetModelRatio("upstream-cogview", channeltype.Zhipu) * billingratio.GetGroupRatio("default") * 1000)
+	if int64(imageLog.Quota) != expectedQuota {
+		t.Fatalf("provider image quota %d does not match the size-billing estimate %d", imageLog.Quota, expectedQuota)
+	}
+	if imageLog.PromptTokens != 0 {
+		t.Fatalf("provider image consume log should not report prompt tokens: %d", imageLog.PromptTokens)
+	}
+}

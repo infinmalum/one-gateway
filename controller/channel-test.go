@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -18,27 +17,26 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/infinmalum/one-gateway/common/config"
-	"github.com/infinmalum/one-gateway/common/ctxkey"
 	"github.com/infinmalum/one-gateway/common/helper"
 	"github.com/infinmalum/one-gateway/common/logger"
 	"github.com/infinmalum/one-gateway/common/message"
-	"github.com/infinmalum/one-gateway/middleware"
 	"github.com/infinmalum/one-gateway/model"
 	"github.com/infinmalum/one-gateway/monitor"
 	"github.com/infinmalum/one-gateway/relay"
+	"github.com/infinmalum/one-gateway/relay/adaptor"
 	"github.com/infinmalum/one-gateway/relay/adaptor/openai"
 	"github.com/infinmalum/one-gateway/relay/channeltype"
-	"github.com/infinmalum/one-gateway/relay/controller"
-	"github.com/infinmalum/one-gateway/relay/ginmeta"
+	relaycontroller "github.com/infinmalum/one-gateway/relay/controller"
+	"github.com/infinmalum/one-gateway/relay/meta"
 	relaymodel "github.com/infinmalum/one-gateway/relay/model"
 	"github.com/infinmalum/one-gateway/relay/relaymode"
 )
 
-func buildTestRequest(model string) *relaymodel.GeneralOpenAIRequest {
+func buildTestRequest(model string) *relaymodel.TextRequest {
 	if model == "" {
 		model = "gpt-3.5-turbo"
 	}
-	testRequest := &relaymodel.GeneralOpenAIRequest{
+	testRequest := &relaymodel.TextRequest{
 		Model: model,
 	}
 	testMessage := relaymodel.Message{
@@ -65,28 +63,31 @@ func parseTestResponse(resp string) (*openai.TextResponse, string, error) {
 	return &response, stringContent, nil
 }
 
-func testChannel(ctx context.Context, channel *model.Channel, request *relaymodel.GeneralOpenAIRequest) (responseMessage string, err error, openaiErr *relaymodel.Error) {
+func testChannel(ctx context.Context, channel *model.Channel, request *relaymodel.TextRequest) (responseMessage string, err error, openaiErr *relaymodel.Error) {
 	startTime := time.Now()
-	w := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(w)
-	c.Request = &http.Request{
+	recorder := httptest.NewRecorder()
+	testRequest := &http.Request{
 		Method: "POST",
 		URL:    &url.URL{Path: "/v1/chat/completions"},
 		Body:   nil,
 		Header: make(http.Header),
 	}
-	c.Request.Header.Set("Authorization", "Bearer "+channel.Key)
-	c.Request.Header.Set("Content-Type", "application/json")
-	c.Set(ctxkey.Channel, channel.Type)
-	c.Set(ctxkey.BaseURL, channel.GetBaseURL())
-	cfg, _ := channel.LoadConfig()
-	c.Set(ctxkey.Config, cfg)
-	middleware.SetupContextForSelectedChannel(c, channel, "")
-	meta := ginmeta.Get(c)
+	testRequest.Header.Set("Content-Type", "application/json")
+	transport := adaptor.NewContext(testRequest, recorder)
 	apiType := channeltype.ToAPIType(channel.Type)
 	adaptor := relay.GetAdaptor(apiType)
 	if adaptor == nil {
 		return "", fmt.Errorf("invalid api type: %d, adaptor is nil", apiType), nil
+	}
+	cfg, _ := channel.LoadConfig()
+	baseURL := channel.GetBaseURL()
+	if baseURL == "" {
+		baseURL = channeltype.ChannelBaseURLs[channel.Type]
+	}
+	meta := &meta.Meta{
+		Mode: relaymode.ChatCompletions, ChannelType: channel.Type, ChannelId: channel.Id,
+		BaseURL: baseURL, APIKey: channel.Key, APIType: apiType, Config: cfg,
+		RequestURLPath: "/v1/chat/completions", StartTime: startTime,
 	}
 	adaptor.Init(meta)
 	modelName := request.Model
@@ -108,7 +109,7 @@ func testChannel(ctx context.Context, channel *model.Channel, request *relaymode
 		return "", err, nil
 	}
 	for key, value := range conversion.Values {
-		c.Set(key, value)
+		transport.Set(key, value)
 	}
 	jsonData, err := json.Marshal(convertedRequest)
 	if err != nil {
@@ -134,39 +135,31 @@ func testChannel(ctx context.Context, channel *model.Channel, request *relaymode
 	}()
 	logger.SysLog(string(jsonData))
 	requestBody := bytes.NewBuffer(jsonData)
-	c.Request.Body = io.NopCloser(requestBody)
-	resp, err := adaptor.DoRequest(c, meta, requestBody)
+	resp, err := adaptor.DoRequest(transport, meta, requestBody)
 	if err != nil {
 		return "", err, nil
 	}
 	if resp != nil && resp.StatusCode != http.StatusOK {
-		err := controller.RelayErrorHandler(resp)
+		err := relaycontroller.RelayErrorHandler(resp)
 		errorMessage := err.Error.Message
 		if errorMessage != "" {
 			errorMessage = ", error message: " + errorMessage
 		}
 		return "", fmt.Errorf("http status code: %d%s", resp.StatusCode, errorMessage), &err.Error
 	}
-	usage, respErr := adaptor.DoResponse(c, resp, meta)
+	usage, respErr := adaptor.DoResponse(transport, resp, meta)
 	if respErr != nil {
 		return "", fmt.Errorf("%s", respErr.Error.Message), &respErr.Error
 	}
 	if usage == nil {
 		return "", errors.New("usage is nil"), nil
 	}
-	rawResponse := w.Body.String()
+	rawResponse := recorder.Body.String()
 	_, responseMessage, err = parseTestResponse(rawResponse)
 	if err != nil {
 		logger.SysError(fmt.Sprintf("failed to parse error: %s, \nresponse: %s", err.Error(), rawResponse))
 		return "", err, nil
 	}
-	result := w.Result()
-	// print result.Body
-	respBody, err := io.ReadAll(result.Body)
-	if err != nil {
-		return "", err, nil
-	}
-	logger.SysLog(fmt.Sprintf("testing channel #%d, response: \n%s", channel.Id, string(respBody)))
 	return responseMessage, nil, nil
 }
 

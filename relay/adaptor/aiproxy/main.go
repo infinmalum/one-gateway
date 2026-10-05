@@ -4,17 +4,17 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
-	"github.com/infinmalum/one-gateway/common/render"
 	"io"
 	"net/http"
 	"strconv"
 	"strings"
 
-	"github.com/gin-gonic/gin"
 	"github.com/infinmalum/one-gateway/common"
 	"github.com/infinmalum/one-gateway/common/helper"
 	"github.com/infinmalum/one-gateway/common/logger"
 	"github.com/infinmalum/one-gateway/common/random"
+	"github.com/infinmalum/one-gateway/common/render"
+	"github.com/infinmalum/one-gateway/relay/adaptor"
 	"github.com/infinmalum/one-gateway/relay/adaptor/openai"
 	"github.com/infinmalum/one-gateway/relay/constant"
 	"github.com/infinmalum/one-gateway/relay/model"
@@ -22,7 +22,7 @@ import (
 
 // https://docs.aiproxy.io/dev/library#使用已经定制好的知识库进行对话问答
 
-func ConvertRequest(request model.GeneralOpenAIRequest) *LibraryRequest {
+func ConvertRequest(request model.TextRequest) *LibraryRequest {
 	query := ""
 	if len(request.Messages) != 0 {
 		query = request.Messages[len(request.Messages)-1].StringContent()
@@ -89,7 +89,7 @@ func streamResponseAIProxyLibrary2OpenAI(response *LibraryStreamResponse) *opena
 	}
 }
 
-func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCode, *model.Usage) {
+func StreamHandler(c *adaptor.Context, resp *http.Response) (*model.ErrorWithStatusCode, *model.Usage) {
 	var usage model.Usage
 	var documents []LibraryDocument
 	scanner := bufio.NewScanner(resp.Body)
@@ -106,7 +106,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 		return 0, nil, nil
 	})
 
-	common.SetEventStreamHeaders(c)
+	common.SetEventStreamHeaders(c.Writer)
 	complete := false
 
 	for scanner.Scan() {
@@ -116,18 +116,18 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 		}
 		data = data[5:]
 
-		var AIProxyLibraryResponse LibraryStreamResponse
-		err := json.Unmarshal([]byte(data), &AIProxyLibraryResponse)
+		var aiProxyLibraryResponse LibraryStreamResponse
+		err := json.Unmarshal([]byte(data), &aiProxyLibraryResponse)
 		if err != nil {
 			logger.SysError("error unmarshalling stream response: " + err.Error())
 			continue
 		}
-		if len(AIProxyLibraryResponse.Documents) != 0 {
-			documents = AIProxyLibraryResponse.Documents
+		if len(aiProxyLibraryResponse.Documents) != 0 {
+			documents = aiProxyLibraryResponse.Documents
 		}
-		complete = complete || AIProxyLibraryResponse.Finish
-		response := streamResponseAIProxyLibrary2OpenAI(&AIProxyLibraryResponse)
-		err = render.ObjectData(c, response)
+		complete = complete || aiProxyLibraryResponse.Finish
+		response := streamResponseAIProxyLibrary2OpenAI(&aiProxyLibraryResponse)
+		err = render.ObjectData(c.Writer, response)
 		if err != nil {
 			logger.SysError(err.Error())
 		}
@@ -143,11 +143,11 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 	}
 
 	response := documentsAIProxyLibrary(documents)
-	err := render.ObjectData(c, response)
+	err := render.ObjectData(c.Writer, response)
 	if err != nil {
 		logger.SysError(err.Error())
 	}
-	render.Done(c)
+	render.Done(c.Writer)
 
 	err = resp.Body.Close()
 	if err != nil {
@@ -157,8 +157,8 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 	return nil, &usage
 }
 
-func Handler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCode, *model.Usage) {
-	var AIProxyLibraryResponse LibraryResponse
+func Handler(c *adaptor.Context, resp *http.Response) (*model.ErrorWithStatusCode, *model.Usage) {
+	var aiProxyLibraryResponse LibraryResponse
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return openai.ErrorWrapper(err, "read_response_body_failed", http.StatusInternalServerError), nil
@@ -167,21 +167,21 @@ func Handler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCode, *
 	if err != nil {
 		return openai.ErrorWrapper(err, "close_response_body_failed", http.StatusInternalServerError), nil
 	}
-	err = json.Unmarshal(responseBody, &AIProxyLibraryResponse)
+	err = json.Unmarshal(responseBody, &aiProxyLibraryResponse)
 	if err != nil {
 		return openai.ErrorWrapper(err, "unmarshal_response_body_failed", http.StatusInternalServerError), nil
 	}
-	if AIProxyLibraryResponse.ErrCode != 0 {
+	if aiProxyLibraryResponse.ErrCode != 0 {
 		return &model.ErrorWithStatusCode{
 			Error: model.Error{
-				Message: AIProxyLibraryResponse.Message,
-				Type:    strconv.Itoa(AIProxyLibraryResponse.ErrCode),
-				Code:    AIProxyLibraryResponse.ErrCode,
+				Message: aiProxyLibraryResponse.Message,
+				Type:    strconv.Itoa(aiProxyLibraryResponse.ErrCode),
+				Code:    aiProxyLibraryResponse.ErrCode,
 			},
 			StatusCode: resp.StatusCode,
 		}, nil
 	}
-	fullTextResponse := responseAIProxyLibrary2OpenAI(&AIProxyLibraryResponse)
+	fullTextResponse := responseAIProxyLibrary2OpenAI(&aiProxyLibraryResponse)
 	jsonResponse, err := json.Marshal(fullTextResponse)
 	if err != nil {
 		return openai.ErrorWrapper(err, "marshal_response_body_failed", http.StatusInternalServerError), nil
