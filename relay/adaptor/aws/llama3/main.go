@@ -9,20 +9,20 @@ import (
 	"net/http"
 	"text/template"
 
+	"github.com/infinmalum/one-gateway/common"
 	"github.com/infinmalum/one-gateway/common/ctxkey"
+	"github.com/infinmalum/one-gateway/common/helper"
+	"github.com/infinmalum/one-gateway/common/logger"
 	"github.com/infinmalum/one-gateway/common/random"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime/types"
-	"github.com/gin-gonic/gin"
-	"github.com/pkg/errors"
-	"github.com/infinmalum/one-gateway/common"
-	"github.com/infinmalum/one-gateway/common/helper"
-	"github.com/infinmalum/one-gateway/common/logger"
+	"github.com/infinmalum/one-gateway/relay/adaptor"
 	"github.com/infinmalum/one-gateway/relay/adaptor/aws/utils"
 	"github.com/infinmalum/one-gateway/relay/adaptor/openai"
 	relaymodel "github.com/infinmalum/one-gateway/relay/model"
+	"github.com/pkg/errors"
 )
 
 // Only support llama-3-8b and llama-3-70b instruction models
@@ -55,7 +55,7 @@ func RenderPrompt(messages []relaymodel.Message) string {
 	return buf.String()
 }
 
-func ConvertRequest(textRequest relaymodel.GeneralOpenAIRequest) *Request {
+func ConvertRequest(textRequest relaymodel.TextRequest) *Request {
 	llamaRequest := Request{
 		MaxGenLen:   textRequest.MaxTokens,
 		Temperature: textRequest.Temperature,
@@ -69,7 +69,7 @@ func ConvertRequest(textRequest relaymodel.GeneralOpenAIRequest) *Request {
 	return &llamaRequest
 }
 
-func Handler(c *gin.Context, awsCli *bedrockruntime.Client, modelName string) (*relaymodel.ErrorWithStatusCode, *relaymodel.Usage) {
+func Handler(c *adaptor.Context, awsCli *bedrockruntime.Client, modelName string) (*relaymodel.ErrorWithStatusCode, *relaymodel.Usage) {
 	awsModelId, err := awsModelID(c.GetString(ctxkey.RequestModel))
 	if err != nil {
 		return utils.WrapErr(errors.Wrap(err, "awsModelID")), nil
@@ -138,7 +138,7 @@ func ResponseLlama2OpenAI(llamaResponse *Response) *openai.TextResponse {
 	return &fullTextResponse
 }
 
-func StreamHandler(c *gin.Context, awsCli *bedrockruntime.Client) (*relaymodel.ErrorWithStatusCode, *relaymodel.Usage) {
+func StreamHandler(c *adaptor.Context, awsCli *bedrockruntime.Client) (*relaymodel.ErrorWithStatusCode, *relaymodel.Usage) {
 	createdTime := helper.GetTimestamp()
 	awsModelId, err := awsModelID(c.GetString(ctxkey.RequestModel))
 	if err != nil {

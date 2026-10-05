@@ -3,7 +3,7 @@ package vertexai
 import (
 	"net/http"
 
-	"github.com/gin-gonic/gin"
+	"github.com/infinmalum/one-gateway/relay/adaptor"
 	claude "github.com/infinmalum/one-gateway/relay/adaptor/vertexai/claude"
 	gemini "github.com/infinmalum/one-gateway/relay/adaptor/vertexai/gemini"
 	"github.com/infinmalum/one-gateway/relay/meta"
@@ -34,7 +34,7 @@ func init() {
 
 type innerAIAdapter interface {
 	ConvertRequest(input *model.ConversionInput) (any, error)
-	DoResponse(c *gin.Context, resp *http.Response, meta *meta.Meta) (usage *model.Usage, err *model.ErrorWithStatusCode)
+	DoResponse(c *adaptor.Context, resp *http.Response, meta *meta.Meta) (usage *model.Usage, err *model.ErrorWithStatusCode)
 }
 
 func GetAdaptor(model string) innerAIAdapter {

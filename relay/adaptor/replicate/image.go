@@ -12,10 +12,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/infinmalum/one-gateway/common/logger"
+	"github.com/infinmalum/one-gateway/relay/adaptor"
 	"github.com/infinmalum/one-gateway/relay/adaptor/openai"
-	"github.com/infinmalum/one-gateway/relay/ginmeta"
+	"github.com/infinmalum/one-gateway/relay/meta"
 	"github.com/infinmalum/one-gateway/relay/model"
 	"github.com/pkg/errors"
 	"golang.org/x/image/webp"
@@ -41,7 +41,7 @@ import (
 
 var errNextLoop = errors.New("next_loop")
 
-func ImageHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCode, *model.Usage) {
+func ImageHandler(c *adaptor.Context, resp *http.Response, meta *meta.Meta) (*model.ErrorWithStatusCode, *model.Usage) {
 	if resp.StatusCode != http.StatusCreated {
 		payload, _ := io.ReadAll(resp.Body)
 		return openai.ErrorWrapper(
@@ -69,7 +69,7 @@ func ImageHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCo
 				return errors.Wrap(err, "new request")
 			}
 
-			taskReq.Header.Set("Authorization", "Bearer "+ginmeta.Get(c).APIKey)
+			taskReq.Header.Set("Authorization", "Bearer "+meta.APIKey)
 			taskResp, err := http.DefaultClient.Do(taskReq)
 			if err != nil {
 				return errors.Wrap(err, "get task")
@@ -164,7 +164,7 @@ func ImageHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCo
 					return errors.WithStack(err)
 				}
 
-				logger.Error(c, fmt.Sprintf("some images failed to download: %+v", err))
+				logger.Error(c.Request.Context(), fmt.Sprintf("some images failed to download: %+v", err))
 			}
 
 			c.JSON(http.StatusOK, respBody)

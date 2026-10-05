@@ -2,51 +2,17 @@ package controller
 
 import (
 	"context"
-	"fmt"
-	"math"
 	"net/http"
 	"strings"
 
-	"github.com/infinmalum/one-gateway/common/helper"
-	"github.com/infinmalum/one-gateway/relay/constant/role"
-
-	"github.com/gin-gonic/gin"
-
-	"github.com/infinmalum/one-gateway/common"
-	"github.com/infinmalum/one-gateway/common/config"
-	"github.com/infinmalum/one-gateway/common/logger"
-	"github.com/infinmalum/one-gateway/model"
 	"github.com/infinmalum/one-gateway/relay/adaptor/openai"
-	"github.com/infinmalum/one-gateway/relay/billing"
-	billingratio "github.com/infinmalum/one-gateway/relay/billing/ratio"
 	"github.com/infinmalum/one-gateway/relay/channeltype"
-	"github.com/infinmalum/one-gateway/relay/controller/validator"
 	"github.com/infinmalum/one-gateway/relay/meta"
 	relaymodel "github.com/infinmalum/one-gateway/relay/model"
-	"github.com/infinmalum/one-gateway/relay/native"
 	"github.com/infinmalum/one-gateway/relay/relaymode"
 )
 
-func getAndValidateTextRequest(c *gin.Context, relayMode int) (*relaymodel.GeneralOpenAIRequest, error) {
-	textRequest := &relaymodel.GeneralOpenAIRequest{}
-	err := common.UnmarshalBodyReusable(c, textRequest)
-	if err != nil {
-		return nil, err
-	}
-	if relayMode == relaymode.Moderations && textRequest.Model == "" {
-		textRequest.Model = native.DefaultModerationModel
-	}
-	if relayMode == relaymode.Embeddings && textRequest.Model == "" {
-		textRequest.Model = c.Param("model")
-	}
-	err = validator.ValidateTextRequest(textRequest, relayMode)
-	if err != nil {
-		return nil, err
-	}
-	return textRequest, nil
-}
-
-func getPromptTokens(textRequest *relaymodel.GeneralOpenAIRequest, relayMode int) int {
+func getPromptTokens(textRequest *relaymodel.TextRequest, relayMode int) int {
 	switch relayMode {
 	case relaymode.ChatCompletions:
 		return openai.CountTokenMessages(textRequest.Messages, textRequest.Model)
@@ -56,66 +22,6 @@ func getPromptTokens(textRequest *relaymodel.GeneralOpenAIRequest, relayMode int
 		return openai.CountTokenInput(textRequest.Input, textRequest.Model)
 	}
 	return 0
-}
-
-func getPreConsumedQuota(textRequest *relaymodel.GeneralOpenAIRequest, promptTokens int, ratio float64) int64 {
-	preConsumedTokens := config.PreConsumedQuota + int64(promptTokens)
-	if textRequest.MaxTokens != 0 {
-		preConsumedTokens += int64(textRequest.MaxTokens)
-	}
-	return int64(float64(preConsumedTokens) * ratio)
-}
-
-func preConsumeQuota(ctx context.Context, textRequest *relaymodel.GeneralOpenAIRequest, promptTokens int, ratio float64, meta *meta.Meta) (*billing.Reservation, *relaymodel.ErrorWithStatusCode) {
-	preConsumedQuota := getPreConsumedQuota(textRequest, promptTokens, ratio)
-	reservation, err := billing.Reserve(ctx, meta.UserId, meta.TokenId, preConsumedQuota)
-	if err != nil {
-		return nil, openai.ErrorWrapper(err, "reserve_quota_failed", http.StatusForbidden)
-	}
-	return reservation, nil
-}
-
-func postConsumeQuota(ctx context.Context, usage *relaymodel.Usage, meta *meta.Meta, textRequest *relaymodel.GeneralOpenAIRequest, ratio float64, reservation *billing.Reservation, modelRatio float64, groupRatio float64, systemPromptReset, interrupted bool) {
-	if usage == nil {
-		usage = &relaymodel.Usage{}
-	}
-	var quota int64
-	completionRatio := billingratio.GetCompletionRatio(textRequest.Model, meta.ChannelType)
-	promptTokens := usage.PromptTokens
-	completionTokens := usage.CompletionTokens
-	quota = int64(math.Ceil((float64(promptTokens) + float64(completionTokens)*completionRatio) * ratio))
-	if ratio != 0 && quota <= 0 {
-		quota = 1
-	}
-	totalTokens := promptTokens + completionTokens
-	if totalTokens == 0 {
-		// in this case, must be some error happened
-		// we cannot just return, because we may have to return the pre-consumed quota
-		quota = 0
-	}
-	if interrupted {
-		quota = max(quota, reservation.Reserved)
-	}
-	quota = reservation.Settle(ctx, quota)
-	logContent := fmt.Sprintf("倍率：%.2f × %.2f × %.2f", modelRatio, groupRatio, completionRatio)
-	if interrupted {
-		logContent += "; response interrupted"
-	}
-	model.RecordConsumeLog(ctx, &model.Log{
-		UserId:            meta.UserId,
-		ChannelId:         meta.ChannelId,
-		PromptTokens:      promptTokens,
-		CompletionTokens:  completionTokens,
-		ModelName:         textRequest.Model,
-		TokenName:         meta.TokenName,
-		Quota:             int(quota),
-		Content:           logContent,
-		IsStream:          meta.IsStream,
-		ElapsedTime:       helper.CalcElapsedTime(meta.StartTime),
-		SystemPromptReset: systemPromptReset,
-	})
-	model.UpdateUserUsedQuotaAndRequestCount(meta.UserId, quota)
-	model.UpdateChannelUsedQuota(meta.ChannelId, quota)
 }
 
 func getMappedModelName(modelName string, mapping map[string]string) (string, bool) {
@@ -137,7 +43,7 @@ func isErrorHappened(meta *meta.Meta, resp *http.Response) bool {
 		return true
 	}
 	if resp.StatusCode != http.StatusOK &&
-		// replicate return 201 to create a task
+		// replicate returns 201 to create a task
 		resp.StatusCode != http.StatusCreated {
 		return true
 	}
@@ -155,22 +61,20 @@ func isErrorHappened(meta *meta.Meta, resp *http.Response) bool {
 	return false
 }
 
-func setSystemPrompt(ctx context.Context, request *relaymodel.GeneralOpenAIRequest, prompt string) (reset bool) {
+func setSystemPrompt(ctx context.Context, request *relaymodel.TextRequest, prompt string) (reset bool) {
 	if prompt == "" {
 		return false
 	}
 	if len(request.Messages) == 0 {
 		return false
 	}
-	if request.Messages[0].Role == role.System {
+	if request.Messages[0].Role == "system" {
 		request.Messages[0].Content = prompt
-		logger.Infof(ctx, "rewrite system prompt")
 		return true
 	}
 	request.Messages = append([]relaymodel.Message{{
-		Role:    role.System,
+		Role:    "system",
 		Content: prompt,
 	}}, request.Messages...)
-	logger.Infof(ctx, "add system prompt")
 	return true
 }

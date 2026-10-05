@@ -3,15 +3,15 @@ package adaptor
 import (
 	"errors"
 	"fmt"
-	"github.com/gin-gonic/gin"
-	"github.com/infinmalum/one-gateway/common/client"
-	"github.com/infinmalum/one-gateway/relay/meta"
 	"io"
 	"net/http"
 	"strings"
+
+	"github.com/infinmalum/one-gateway/common/client"
+	"github.com/infinmalum/one-gateway/relay/meta"
 )
 
-func SetupCommonRequestHeader(c *gin.Context, req *http.Request, meta *meta.Meta) {
+func SetupCommonRequestHeader(c *Context, req *http.Request, meta *meta.Meta) {
 	req.Header.Set("Content-Type", c.Request.Header.Get("Content-Type"))
 	req.Header.Set("Accept", c.Request.Header.Get("Accept"))
 	if meta.IsStream && c.Request.Header.Get("Accept") == "" {
@@ -19,7 +19,7 @@ func SetupCommonRequestHeader(c *gin.Context, req *http.Request, meta *meta.Meta
 	}
 }
 
-func DoRequestHelper(a Adaptor, c *gin.Context, meta *meta.Meta, requestBody io.Reader) (*http.Response, error) {
+func DoRequestHelper(a Adaptor, c *Context, meta *meta.Meta, requestBody io.Reader) (*http.Response, error) {
 	fullRequestURL, err := a.GetRequestURL(meta)
 	if err != nil {
 		return nil, fmt.Errorf("get request url failed: %w", err)
@@ -39,7 +39,7 @@ func DoRequestHelper(a Adaptor, c *gin.Context, meta *meta.Meta, requestBody io.
 	return resp, nil
 }
 
-func DoRequest(c *gin.Context, req *http.Request) (*http.Response, error) {
+func DoRequest(c *Context, req *http.Request) (*http.Response, error) {
 	httpClient := client.HTTPClient
 	if httpClient == nil {
 		httpClient = http.DefaultClient

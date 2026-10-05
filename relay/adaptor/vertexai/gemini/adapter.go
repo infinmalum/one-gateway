@@ -3,15 +3,14 @@ package vertexai
 import (
 	"net/http"
 
-	"github.com/gin-gonic/gin"
 	"github.com/infinmalum/one-gateway/common/ctxkey"
+	"github.com/infinmalum/one-gateway/relay/adaptor"
 	"github.com/infinmalum/one-gateway/relay/adaptor/gemini"
 	"github.com/infinmalum/one-gateway/relay/adaptor/openai"
-	"github.com/infinmalum/one-gateway/relay/relaymode"
-	"github.com/pkg/errors"
-
 	"github.com/infinmalum/one-gateway/relay/meta"
 	"github.com/infinmalum/one-gateway/relay/model"
+	"github.com/infinmalum/one-gateway/relay/relaymode"
+	"github.com/pkg/errors"
 )
 
 var ModelList = []string{
@@ -39,7 +38,7 @@ func (a *Adaptor) ConvertRequest(in *model.ConversionInput) (any, error) {
 	return geminiRequest, nil
 }
 
-func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Meta) (usage *model.Usage, err *model.ErrorWithStatusCode) {
+func (a *Adaptor) DoResponse(c *adaptor.Context, resp *http.Response, meta *meta.Meta) (usage *model.Usage, err *model.ErrorWithStatusCode) {
 	if meta.IsStream {
 		var responseText string
 		err, responseText = gemini.StreamHandler(c, resp)

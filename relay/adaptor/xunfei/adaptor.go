@@ -2,18 +2,18 @@ package xunfei
 
 import (
 	"errors"
-	"github.com/gin-gonic/gin"
+	"io"
+	"net/http"
+	"strings"
+
 	"github.com/infinmalum/one-gateway/relay/adaptor"
 	"github.com/infinmalum/one-gateway/relay/adaptor/openai"
 	"github.com/infinmalum/one-gateway/relay/meta"
 	"github.com/infinmalum/one-gateway/relay/model"
-	"io"
-	"net/http"
-	"strings"
 )
 
 type Adaptor struct {
-	request *model.GeneralOpenAIRequest
+	request *model.TextRequest
 	meta    *meta.Meta
 }
 
@@ -25,7 +25,7 @@ func (a *Adaptor) GetRequestURL(meta *meta.Meta) (string, error) {
 	return "", nil
 }
 
-func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Request, meta *meta.Meta) error {
+func (a *Adaptor) SetupRequestHeader(c *adaptor.Context, req *http.Request, meta *meta.Meta) error {
 	adaptor.SetupCommonRequestHeader(c, req, meta)
 	// check DoResponse for auth part
 	return nil
@@ -47,14 +47,14 @@ func (a *Adaptor) ConvertImageRequest(request *model.ImageRequest) (any, error) 
 	return request, nil
 }
 
-func (a *Adaptor) DoRequest(c *gin.Context, meta *meta.Meta, requestBody io.Reader) (*http.Response, error) {
+func (a *Adaptor) DoRequest(c *adaptor.Context, meta *meta.Meta, requestBody io.Reader) (*http.Response, error) {
 	// xunfei's request is not http request, so we don't need to do anything here
 	dummyResp := &http.Response{}
 	dummyResp.StatusCode = http.StatusOK
 	return dummyResp, nil
 }
 
-func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Meta) (usage *model.Usage, err *model.ErrorWithStatusCode) {
+func (a *Adaptor) DoResponse(c *adaptor.Context, resp *http.Response, meta *meta.Meta) (usage *model.Usage, err *model.ErrorWithStatusCode) {
 	splits := strings.Split(meta.APIKey, "|")
 	if len(splits) != 3 {
 		return nil, openai.ErrorWrapper(errors.New("invalid auth"), "invalid_auth", http.StatusBadRequest)

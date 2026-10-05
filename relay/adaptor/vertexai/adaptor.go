@@ -7,12 +7,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/gin-gonic/gin"
 	"github.com/infinmalum/one-gateway/relay/adaptor"
-	channelhelper "github.com/infinmalum/one-gateway/relay/adaptor"
 	"github.com/infinmalum/one-gateway/relay/meta"
 	"github.com/infinmalum/one-gateway/relay/model"
-	relaymodel "github.com/infinmalum/one-gateway/relay/model"
 )
 
 var _ adaptor.Adaptor = new(Adaptor)
@@ -30,25 +27,25 @@ func (a *Adaptor) ConvertRequest(in *model.ConversionInput) (any, error) {
 		return nil, errors.New("request is nil")
 	}
 
-	adaptor := GetAdaptor(request.Model)
-	if adaptor == nil {
+	inner := GetAdaptor(request.Model)
+	if inner == nil {
 		return nil, errors.New("adaptor not found")
 	}
 
-	return adaptor.ConvertRequest(in)
+	return inner.ConvertRequest(in)
 }
 
-func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Meta) (usage *model.Usage, err *model.ErrorWithStatusCode) {
-	adaptor := GetAdaptor(meta.ActualModelName)
-	if adaptor == nil {
-		return nil, &relaymodel.ErrorWithStatusCode{
+func (a *Adaptor) DoResponse(c *adaptor.Context, resp *http.Response, meta *meta.Meta) (usage *model.Usage, err *model.ErrorWithStatusCode) {
+	inner := GetAdaptor(meta.ActualModelName)
+	if inner == nil {
+		return nil, &model.ErrorWithStatusCode{
 			StatusCode: http.StatusInternalServerError,
-			Error: relaymodel.Error{
+			Error: model.Error{
 				Message: "adaptor not found",
 			},
 		}
 	}
-	return adaptor.DoResponse(c, resp, meta)
+	return inner.DoResponse(c, resp, meta)
 }
 
 func (a *Adaptor) GetModelList() (models []string) {
@@ -96,9 +93,9 @@ func (a *Adaptor) GetRequestURL(meta *meta.Meta) (string, error) {
 	), nil
 }
 
-func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Request, meta *meta.Meta) error {
+func (a *Adaptor) SetupRequestHeader(c *adaptor.Context, req *http.Request, meta *meta.Meta) error {
 	adaptor.SetupCommonRequestHeader(c, req, meta)
-	token, err := getToken(c, meta.ChannelId, meta.Config.VertexAIADC)
+	token, err := getToken(c.Request.Context(), meta.ChannelId, meta.Config.VertexAIADC)
 	if err != nil {
 		return err
 	}
@@ -113,6 +110,6 @@ func (a *Adaptor) ConvertImageRequest(request *model.ImageRequest) (any, error) 
 	return request, nil
 }
 
-func (a *Adaptor) DoRequest(c *gin.Context, meta *meta.Meta, requestBody io.Reader) (*http.Response, error) {
-	return channelhelper.DoRequestHelper(a, c, meta, requestBody)
+func (a *Adaptor) DoRequest(c *adaptor.Context, meta *meta.Meta, requestBody io.Reader) (*http.Response, error) {
+	return adaptor.DoRequestHelper(a, c, meta, requestBody)
 }

@@ -36,7 +36,7 @@ tests.
 | `POST /v1/responses` | OpenAI channels with the model in the user's group | Native synchronous and SSE create, preserving response items and events; requires an explicit `model`. Background creates return a queued response object and are executed asynchronously, with retrieval via `GET /v1/responses/{id}` and idempotent cancellation via `POST /v1/responses/{id}/cancel`; background streaming is rejected explicitly. |
 | `POST /v1/messages` | Anthropic channels first; OpenAI channels, then Gemini channels, for the supported conversion subsets | Native request and response forwarding, including SSE, usage, mapping, configured system prompt, and retry before response output. Synchronous and streaming text/user-image/function-tool requests can convert to OpenAI Chat; synchronous and streaming text/thinking/tool/media requests can convert to Gemini. Assistant-side media and other unrepresentable media remain unsupported. |
 | `POST /v1[beta]/models/{model}:generateContent` and `:streamGenerateContent` | Gemini channels with the model in the user's group | Native forwarding on both versions, with retry before response output; no cross-protocol conversion. |
-| Image generation, audio, edits, moderation, and proxy routes | Native lifecycle on OpenAI-wire channels (edits and moderation reject provider channels); provider adapters for Baidu, Replicate, Zhipu, and Ali images and the provider embeddings formats | Registered routes; provider adapter transport extraction remains. |
+| Image generation, audio, edits, moderation, and proxy routes | Native lifecycle on OpenAI-wire channels (edits and moderation reject provider channels); provider adapters for Baidu, Replicate, Zhipu, and Ali images and the provider embeddings formats run behind the shared lifecycle | Registered routes; the lifecycle owns retries and billing for every metered route. |
 | Files, fine-tuning, assistants, and threads | None | Registered placeholders return not implemented. Gemini File, Live, and Interactions have no routes. |
 
 The remaining legacy route inventory is:
@@ -45,9 +45,9 @@ The remaining legacy route inventory is:
 | --- | --- | --- |
 | `POST /v1/completions` | Native lifecycle on every OpenAI-wire channel type, with a configured system prompt prepended to the prompt; provider channels keep their adapters | Native JSON/SSE, model mapping, extensions, and usage have offline fixtures. |
 | `POST /v1/edits` | Native lifecycle on OpenAI-wire channels; explicit rejection elsewhere | Request shape and stream handling need separate fixtures. |
-| `POST /v1/embeddings`, `/v1/engines/{model}/embeddings` | Native lifecycle on OpenAI-wire channels; provider adapters (Ali, AliBailian, Cloudflare, Gemini, Ollama, Zhipu) on their channel types | OpenAI batch input, extensions, model mapping, large response usage, errors, and engine path model injection have offline fixtures; provider adapters remain until their transport extraction. |
+| `POST /v1/embeddings`, `/v1/engines/{model}/embeddings` | Native lifecycle on OpenAI-wire channels; provider adapters (Ali, AliBailian, Cloudflare, Gemini, Ollama, Zhipu) behind the shared lifecycle on their channel types | OpenAI batch input, extensions, model mapping, large response usage, errors, and engine path model injection have offline fixtures; provider formats run through the provider attempt with lifecycle reservation and settlement. |
 | `POST /v1/moderations` | Native lifecycle on OpenAI-wire channels; explicit rejection elsewhere | OpenAI text and image request preservation, model mapping, `omni-moderation-latest` default, error refund, response preservation, and usage fallback have offline fixtures. |
-| `POST /v1/images/generations` | Native lifecycle with image-size billing on OpenAI-wire channels; provider adapters (Baidu, Replicate, Zhipu, Ali) on their channel types | Provider image request conversion and async polling remain on the legacy controller until their transport extraction. |
+| `POST /v1/images/generations` | Native lifecycle with image-size billing on OpenAI-wire channels; provider adapters (Baidu, Replicate, Zhipu, Ali) behind the shared lifecycle on their channel types | Provider image conversion (including Ali's async task polling inside the adapter) runs through the provider attempt; the exact size-based charge is reserved and settled per attempt. |
 | `POST /v1/audio/{speech,transcriptions,translations}` | Native lifecycle on OpenAI-wire channels, including Azure deployment URLs and api-key authentication; explicit rejection elsewhere | Multipart bodies pass through untouched; speech bills the input length, transcription and translation bill the transcript token count, matching legacy behavior. |
 | `/v1/oneapi/proxy/{channelid}/*target` | Dedicated unmetered controller; admin-only explicit channel selection, same-scheme same-host targets, and cross-origin redirect refusal | Arbitrary target paths keep an isolated security review. |
 
@@ -251,7 +251,7 @@ silently dropped.
   the recorded response under the gateway-assigned ID to the owning user only;
   cancellation is idempotent, refunds the reservation for in-flight tasks, and
   upstream failures surface as a failed status with the provider error.
-- [ ] Port the retained image, audio, edits, proxy, and legacy provider routes;
+- [x] Port the retained image, audio, edits, proxy, and legacy provider routes;
   delete unused adapters and the old shared request type. Ported so far: image
   generation with image-size billing, all three audio operations with legacy
   billing semantics, edits, completions (with configured system prompts now
@@ -260,13 +260,21 @@ silently dropped.
   and audio on provider channels fail explicitly because no adapter ever
   converted them; the proxy route uses a dedicated unmetered controller with
   same-host target validation; the proxy adapter and the legacy audio and proxy
-  controllers are deleted. Remaining: extracting the provider Chat, image, and
-  embeddings adapters (Ali, AliBailian, Baidu, Cloudflare, Gemini, Ollama,
-  Replicate, Zhipu, and the other provider Chat formats) off Gin and
-  `GeneralOpenAIRequest`, after which the legacy text and image controllers and
-  the old shared request type can be deleted.
-- [ ] Gate: all documented routes pass offline conformance tests and no production
-  route uses the legacy relay controller.
+  controllers are deleted. The provider Chat, completions, embeddings, and
+  image adapters (Ali, AliBailian, Baidu, Cloudflare, Gemini, Ollama,
+  Replicate, Zhipu, and the other provider Chat formats) now run behind the
+  shared lifecycle through a framework-neutral `adaptor.Context`: the adapters
+  keep their wire conversion and response handling, while channel retries,
+  reservation, and settlement belong to the lifecycle, and provider image
+  formats reserve and settle their exact size-based charge. The legacy text
+  and image controllers, their private retry loop, and the
+  `GeneralOpenAIRequest` request name are deleted; provider converters parse
+  `TextRequest` directly.
+- [x] Gate: all documented routes pass offline conformance tests and no
+  production route uses the legacy relay controller. The legacy controllers
+  are deleted rather than unreferenced, so the gate holds structurally; the
+  provider image route has an offline conformance fixture covering conversion,
+  forwarding, and exact size-based settlement.
 
 ## SDK evaluation
 
@@ -350,8 +358,15 @@ forwarding remains the default for same-protocol requests.
   adapters keep serving provider-specific embeddings and image formats. The
   proxy route uses a dedicated unmetered controller that validates the target
   stays on the channel's scheme and host, and the proxy adapter plus the
-  legacy audio and proxy controllers are deleted. Remaining phase 5 work: the
-  Gin/`GeneralOpenAIRequest` extraction for the retained provider adapters.
+  legacy audio and proxy controllers are deleted. The provider extraction is
+  complete: every provider chat, completions, embeddings, and image route now
+  runs behind the shared lifecycle through the framework-neutral
+  `adaptor.Context`, so the legacy text and image controllers, their private
+  retry loop, and the `GeneralOpenAIRequest` name are deleted. Provider image
+  formats reserve and settle their exact size-based charge per attempt, and
+  provider attempts feed the channel health monitor. Phase 5 is complete;
+  phase 0's retained-legacy-route baseline items remain as the final
+  documentation debt.
 - Phase 4: native Gemini routing is in place. The synchronous and streaming
   Chat-to-Gemini and Messages-to-Gemini conversions now cover function tools,
   tool choice, tool calls and results (with call IDs preserved so clients can

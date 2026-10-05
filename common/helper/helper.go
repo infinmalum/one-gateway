@@ -11,8 +11,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gin-gonic/gin"
-
 	"github.com/infinmalum/one-gateway/common/random"
 )
 
@@ -121,9 +119,8 @@ func GetRequestID(ctx context.Context) string {
 	return rawRequestId.(string)
 }
 
-func GetResponseID(c *gin.Context) string {
-	logID := c.GetString(RequestIdKey)
-	return fmt.Sprintf("chatcmpl-%s", logID)
+func GetResponseID(requestID string) string {
+	return fmt.Sprintf("chatcmpl-%s", requestID)
 }
 
 func Max(a int, b int) int {

@@ -3,13 +3,14 @@ package openai
 import (
 	"bytes"
 	"encoding/json"
-	"github.com/gin-gonic/gin"
-	"github.com/infinmalum/one-gateway/relay/model"
 	"io"
 	"net/http"
+
+	"github.com/infinmalum/one-gateway/relay/adaptor"
+	"github.com/infinmalum/one-gateway/relay/model"
 )
 
-func ImageHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCode, *model.Usage) {
+func ImageHandler(c *adaptor.Context, resp *http.Response) (*model.ErrorWithStatusCode, *model.Usage) {
 	var imageResponse ImageResponse
 	responseBody, err := io.ReadAll(resp.Body)
 
