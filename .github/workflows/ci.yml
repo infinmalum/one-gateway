@@ -21,22 +21,19 @@ on:
 
 jobs:
   web_build:
-    name: "Build ${{ matrix.theme }} theme"
+    name: "Build web frontend"
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        theme: [default, air, berry]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: web/${{ matrix.theme }}/package-lock.json
+          cache-dependency-path: web/default/package-lock.json
       - run: npm ci --legacy-peer-deps
-        working-directory: web/${{ matrix.theme }}
+        working-directory: web/default
       - run: npm run build
-        working-directory: web/${{ matrix.theme }}
+        working-directory: web/default
 
   unit_tests:
     name: "Unit tests"

@@ -119,8 +119,6 @@ var GeminiSafetySetting = env.String("GEMINI_SAFETY_SETTING", "BLOCK_NONE")
 var Theme = env.String("THEME", "default")
 var ValidThemes = map[string]bool{
 	"default": true,
-	"berry":   true,
-	"air":     true,
 }
 
 // All duration's unit is seconds
