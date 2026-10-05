@@ -7,6 +7,29 @@ import { marked } from 'marked';
 import { UserContext } from '../../context/User';
 import { Link } from 'react-router-dom';
 
+const StatusRow = ({
+  icon,
+  label,
+  children,
+}: {
+  icon: string;
+  label: string;
+  children: React.ReactNode;
+}) => (
+  <p
+    style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: '0.5em',
+      margin: '0.6em 0',
+    }}
+  >
+    <i className={`${icon} icon`}></i>
+    <span style={{ fontWeight: 'bold' }}>{label}</span>
+    {children}
+  </p>
+);
+
 const Home = () => {
   const { t } = useTranslation();
   const [statusState, statusDispatch] = useContext(StatusContext);
@@ -93,45 +116,24 @@ const Home = () => {
                       <Card.Description
                         style={{ lineHeight: '2', marginTop: '1em' }}
                       >
-                        <p
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.5em',
-                          }}
+                        <StatusRow
+                          icon='info circle'
+                          label={t('home.system_status.info.name')}
                         >
-                          <i className='info circle icon'></i>
-                          <span style={{ fontWeight: 'bold' }}>
-                            {t('home.system_status.info.name')}
-                          </span>
                           <span>{statusState?.status?.system_name}</span>
-                        </p>
-                        <p
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.5em',
-                          }}
+                        </StatusRow>
+                        <StatusRow
+                          icon='code branch'
+                          label={t('home.system_status.info.version')}
                         >
-                          <i className='code branch icon'></i>
-                          <span style={{ fontWeight: 'bold' }}>
-                            {t('home.system_status.info.version')}
-                          </span>
                           <span>
                             {statusState?.status?.version || 'unknown'}
                           </span>
-                        </p>
-                        <p
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.5em',
-                          }}
+                        </StatusRow>
+                        <StatusRow
+                          icon='github'
+                          label={t('home.system_status.info.source')}
                         >
-                          <i className='github icon'></i>
-                          <span style={{ fontWeight: 'bold' }}>
-                            {t('home.system_status.info.source')}
-                          </span>
                           <a
                             href='https://github.com/songquanpeng/one-api'
                             target='_blank'
@@ -139,20 +141,13 @@ const Home = () => {
                           >
                             {t('home.system_status.info.source_link')}
                           </a>
-                        </p>
-                        <p
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.5em',
-                          }}
+                        </StatusRow>
+                        <StatusRow
+                          icon='clock outline'
+                          label={t('home.system_status.info.start_time')}
                         >
-                          <i className='clock outline icon'></i>
-                          <span style={{ fontWeight: 'bold' }}>
-                            {t('home.system_status.info.start_time')}
-                          </span>
                           <span>{getStartTimeString()}</span>
-                        </p>
+                        </StatusRow>
                       </Card.Description>
                     </Card.Content>
                   </Card>
@@ -173,102 +168,45 @@ const Home = () => {
                       <Card.Description
                         style={{ lineHeight: '2', marginTop: '1em' }}
                       >
-                        <p
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.5em',
-                          }}
-                        >
-                          <i className='envelope icon'></i>
-                          <span style={{ fontWeight: 'bold' }}>
-                            {t('home.system_status.config.email_verify')}
-                          </span>
-                          <span
-                            style={{
-                              color: statusState?.status?.email_verification
-                                ? '#21ba45'
-                                : '#db2828',
-                              fontWeight: '500',
-                            }}
+                        {[
+                          {
+                            icon: 'envelope',
+                            label: t('home.system_status.config.email_verify'),
+                            enabled: statusState?.status?.email_verification,
+                          },
+                          {
+                            icon: 'github',
+                            label: t('home.system_status.config.github_oauth'),
+                            enabled: statusState?.status?.github_oauth,
+                          },
+                          {
+                            icon: 'wechat',
+                            label: t('home.system_status.config.wechat_login'),
+                            enabled: statusState?.status?.wechat_login,
+                          },
+                          {
+                            icon: 'shield alternate',
+                            label: t('home.system_status.config.turnstile'),
+                            enabled: statusState?.status?.turnstile_check,
+                          },
+                        ].map((item) => (
+                          <StatusRow
+                            key={item.icon}
+                            icon={item.icon}
+                            label={item.label}
                           >
-                            {statusState?.status?.email_verification
-                              ? t('home.system_status.config.enabled')
-                              : t('home.system_status.config.disabled')}
-                          </span>
-                        </p>
-                        <p
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.5em',
-                          }}
-                        >
-                          <i className='github icon'></i>
-                          <span style={{ fontWeight: 'bold' }}>
-                            {t('home.system_status.config.github_oauth')}
-                          </span>
-                          <span
-                            style={{
-                              color: statusState?.status?.github_oauth
-                                ? '#21ba45'
-                                : '#db2828',
-                              fontWeight: '500',
-                            }}
-                          >
-                            {statusState?.status?.github_oauth
-                              ? t('home.system_status.config.enabled')
-                              : t('home.system_status.config.disabled')}
-                          </span>
-                        </p>
-                        <p
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.5em',
-                          }}
-                        >
-                          <i className='wechat icon'></i>
-                          <span style={{ fontWeight: 'bold' }}>
-                            {t('home.system_status.config.wechat_login')}
-                          </span>
-                          <span
-                            style={{
-                              color: statusState?.status?.wechat_login
-                                ? '#21ba45'
-                                : '#db2828',
-                              fontWeight: '500',
-                            }}
-                          >
-                            {statusState?.status?.wechat_login
-                              ? t('home.system_status.config.enabled')
-                              : t('home.system_status.config.disabled')}
-                          </span>
-                        </p>
-                        <p
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.5em',
-                          }}
-                        >
-                          <i className='shield alternate icon'></i>
-                          <span style={{ fontWeight: 'bold' }}>
-                            {t('home.system_status.config.turnstile')}
-                          </span>
-                          <span
-                            style={{
-                              color: statusState?.status?.turnstile_check
-                                ? '#21ba45'
-                                : '#db2828',
-                              fontWeight: '500',
-                            }}
-                          >
-                            {statusState?.status?.turnstile_check
-                              ? t('home.system_status.config.enabled')
-                              : t('home.system_status.config.disabled')}
-                          </span>
-                        </p>
+                            <span
+                              style={{
+                                color: item.enabled ? '#21ba45' : '#db2828',
+                                fontWeight: 500,
+                              }}
+                            >
+                              {item.enabled
+                                ? t('home.system_status.config.enabled')
+                                : t('home.system_status.config.disabled')}
+                            </span>
+                          </StatusRow>
+                        ))}
                       </Card.Description>
                     </Card.Content>
                   </Card>
@@ -286,7 +224,7 @@ const Home = () => {
             />
           ) : (
             <div
-              style={{ fontSize: 'larger' }}
+              className='home-markdown'
               dangerouslySetInnerHTML={{ __html: homePageContent }}
             ></div>
           )}

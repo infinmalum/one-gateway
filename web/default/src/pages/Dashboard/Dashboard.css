@@ -1,6 +1,5 @@
 .dashboard-container {
     padding: 20px 24px 40px;
-    background-color: #ffffff;
     margin-top: -15px; /* 减小与导航栏的间距 */
     max-width: 1600px;        /* 设置最大宽度 */
     margin-left: auto;        /* 水平居中 */
@@ -10,7 +9,7 @@
 .stat-card {
     background: linear-gradient(135deg, #2185d0 0%, #1678c2 100%) !important;
     color: white !important;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1) !important;
+    box-shadow: 0 4px 12px rgba(33, 136, 208, 0.18) !important;
     transition: transform 0.2s ease !important;
     margin-bottom: 1rem !important;
 }
@@ -33,7 +32,7 @@
 
 .chart-card {
     height: 100%;
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04) !important;
+    box-shadow: 0 2px 12px rgba(15, 40, 80, 0.06) !important;
     border: none !important;
     border-radius: 16px !important;
     padding: 8px!important;
@@ -42,12 +41,11 @@
 .chart-container {
     margin-top: 2px;
     padding: 16px;
-    background-color: white;
     border-radius: 12px;
 }
 
 .ui.card > .content > .header {
-    color: #2B3674;
+    color: #1f2937;
     font-size: 1.2em;
     margin-bottom: 15px;
     display: flex;
@@ -58,10 +56,10 @@
 }
 
 .stat-value {
-    color: #4318FF;
+    color: #1678c2;
     font-weight: bold;
     font-size: 1.1em;
-    background: rgba(67, 24, 255, 0.1);
+    background: rgba(33, 136, 208, 0.12);
     padding: 4px 12px;
     border-radius: 8px;
     white-space: nowrap; /* 防止数值换行 */
@@ -74,11 +72,11 @@
         padding: 10px 16px;   /* 移动端也相应减小内边距 */
         max-width: 100%;      /* 移动端占满全宽 */
     }
-    
+
     .chart-container {
         padding: 12px;
     }
-    
+
     .charts-grid .column {
         padding: 0.25rem !important;
     }
@@ -91,19 +89,78 @@
 }
 
 .settings-tab .item {
-    color: #000 !important;
+    color: #1f2937 !important;
     font-weight: 500 !important;
     padding: 0.8rem 1.2rem !important;
 }
 
 .settings-tab .active.item {
-    color: #000 !important;
+    color: #1678c2 !important;
     font-weight: 600 !important;
-    border-color: #000 !important;
+    border-color: #1678c2 !important;
 }
 
 .ui.tab.segment {
     border: none !important;
     box-shadow: none !important;
     padding: 1rem 0 !important;
-} 
+}
+
+/* 首页自定义内容（Markdown/HTML）的排版容器 */
+.home-markdown {
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 24px 16px 40px;
+    line-height: 1.7;
+    font-size: larger;
+}
+
+.home-markdown h1,
+.home-markdown h2,
+.home-markdown h3 {
+    margin: 1.2em 0 0.6em;
+    font-weight: 600;
+    color: #1f2937;
+}
+
+.home-markdown p {
+    margin: 0.8em 0;
+}
+
+.home-markdown a {
+    color: #2185d0;
+}
+
+.home-markdown img {
+    max-width: 100%;
+    border-radius: 8px;
+}
+
+.home-markdown pre {
+    background: #f6f8fa;
+    border-radius: 8px;
+    padding: 12px 16px;
+    overflow-x: auto;
+}
+
+.home-markdown code {
+    background: #f6f8fa;
+    border-radius: 4px;
+    padding: 2px 6px;
+}
+
+.home-markdown pre code {
+    background: transparent;
+    padding: 0;
+}
+
+.home-markdown table {
+    border-collapse: collapse;
+    margin: 1em 0;
+}
+
+.home-markdown th,
+.home-markdown td {
+    border: 1px solid #e5e7eb;
+    padding: 8px 14px;
+}

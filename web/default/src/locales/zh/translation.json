@@ -624,7 +624,7 @@
         },
         "completion": {
           "title": "补全倍率",
-          "placeholder": "为一个 JSON 文本，键为模型名称，值为倍率，此处的倍率设置是模型补全倍率相较于提示倍率的比例，使用该设置可强制覆盖 One API 的内部比例"
+          "placeholder": "为一个 JSON 文本，键为模型名称，值为倍率，此处的倍率设置是模型补全倍率相较于提示倍率的比例，使用该设置可强制覆盖网关的内部比例"
         },
         "group": {
           "title": "分组倍率",
@@ -725,7 +725,7 @@
   },
   "about": {
     "title": "关于",
-    "description": "One API 是一个开源的接口管理和代理平台。",
+    "description": "One Gateway 是一个开源的接口管理和代理平台。",
     "repository": "项目地址：",
     "loading_failed": "加载失败"
   },
@@ -737,8 +737,8 @@
   },
   "home": {
     "welcome": {
-      "title": "欢迎使用 One API",
-      "description": "One API 是一个 LLM API 接口管理和分发系统，可以帮助您更好地管理和使用各大厂商的 LLM API。",
+      "title": "欢迎使用 One Gateway",
+      "description": "One Gateway 是一个 LLM API 接口管理和分发系统，可以帮助您更好地管理和使用各大厂商的 LLM API。",
       "login_notice": "如需使用，请先登录或注册。"
     },
     "system_status": {
