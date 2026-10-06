@@ -1,12 +1,10 @@
 name: CI
 
-# This setup assumes that you run the unit tests with code coverage in the same
-# workflow that will also print the coverage report as comment to the pull request.
+# This setup assumes that you run the unit tests in the same workflow that
+# will also print the coverage report as comment to the pull request.
 # Therefore, you need to trigger this workflow when a pull request is (re)opened or
 # when new code is pushed to the branch of the pull request. In addition, you also
-# need to trigger this workflow when new code is pushed to the main branch because
-# we need to upload the code coverage results as artifact for the main branch as
-# well since it will be the baseline code coverage.
+# need to trigger this workflow when new code is pushed to the main branch.
 #
 # We do not want to trigger the workflow for pushes to *any* branch because this
 # would trigger our jobs twice on pull requests (once from "push" event and once
@@ -51,10 +49,7 @@ jobs:
       # coverage profile to a file. You will need the name of the file (e.g. "coverage.txt")
       # in the next step as well as the next job.
       - name: Test
-        run: go test -cover -coverprofile=coverage.txt ./...
-      - uses: codecov/codecov-action@v4
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
+        run: go test -cover ./...
 
   commit_lint:
     runs-on: ubuntu-latest
